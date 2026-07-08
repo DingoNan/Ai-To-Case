@@ -1,0 +1,2421 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/png" href="/static/img/logo.png">
+    <title>AI测试用例生成模块</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <!-- Markdown 渲染库 -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- Mermaid 流程图渲染 -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <!-- HTML to Markdown 转换库 -->
+    <script src="https://cdn.jsdelivr.net/npm/turndown/dist/turndown.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/turndown-plugin-gfm/dist/turndown-plugin-gfm.js"></script>
+    <style>
+        /* Markdown 渲染区域样式 */
+        .markdown-preview {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            min-height: 150px;
+            max-height: none;
+            overflow-y: visible;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        /* 分栏视图 */
+        .split-view {
+            display: flex;
+            gap: 12px;
+        }
+        .split-view textarea {
+            flex: 1;
+            min-width: 0;
+        }
+        .split-view .markdown-preview {
+            flex: 1;
+            min-width: 0;
+        }
+        /* 仅源码模式 */
+        .split-view.source-only .markdown-preview {
+            display: none;
+        }
+        .split-view.source-only textarea {
+            flex: 1;
+        }
+        /* 仅预览模式 */
+        .split-view.preview-only textarea {
+            display: none;
+        }
+        .split-view.preview-only .markdown-preview {
+            flex: 1;
+        }
+        /* 召回内容选项卡 */
+        .recall-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 8px;
+        }
+        .recall-tab-btn {
+            padding: 6px 12px;
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+        .recall-tab-btn:hover {
+            background: #e8e8e8;
+        }
+        .recall-tab-btn.active {
+            background: #4CAF50;
+            color: white;
+            border-color: #4CAF50;
+        }
+        .markdown-preview table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 10px 0;
+        }
+        .markdown-preview th, .markdown-preview td {
+            border: 1px solid #ddd;
+            padding: 8px 12px;
+            text-align: left;
+        }
+        .markdown-preview th {
+            background: #f5f5f5;
+            font-weight: bold;
+        }
+        .markdown-preview tr:nth-child(even) {
+            background: #fafafa;
+        }
+        .markdown-preview pre {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        .markdown-preview code {
+            background: #f0f0f0;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+        .markdown-preview h1, .markdown-preview h2, .markdown-preview h3 {
+            margin-top: 15px;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 5px;
+        }
+        /* Mermaid 流程图样式 */
+        .mermaid-diagram {
+            background: #fafafa;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 15px 0;
+            text-align: center;
+            overflow-x: auto;
+        }
+        .mermaid-diagram svg {
+            max-width: 100%;
+            height: auto;
+        }
+        /* 切换按钮 */
+        .view-toggle {
+            margin-bottom: 10px;
+        }
+        .view-toggle button {
+            padding: 5px 12px;
+            margin-right: 5px;
+            border: 1px solid #ddd;
+            background: #fff;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+        .view-toggle button.active {
+            background: #4a90e2;
+            color: #fff;
+            border-color: #4a90e2;
+        }
+        /* 召回结果标签页样式 */
+        .recall-tab-content {
+            display: block;
+        }
+        .recall-tab-content.hidden {
+            display: none;
+        }
+        .btn-sm {
+            padding: 4px 10px;
+            font-size: 13px;
+        }
+        .btn-default {
+            background: #fff;
+            border: 1px solid #ddd;
+            color: #333;
+        }
+        .btn-default:hover {
+            background: #f5f5f5;
+        }
+        .btn-primary {
+            background: #4a90e2;
+            border-color: #4a90e2;
+            color: #fff;
+        }
+        .btn-primary:hover {
+            background: #357abd;
+            border-color: #357abd;
+        }
+        /* 上传模式选择器 */
+        .upload-mode-selector {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 10px;
+            padding: 8px 12px;
+            background: #f9f9f9;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><img src="/static/img/logo.png" alt="logo" style="width:32px;height:32px;vertical-align:middle;margin-right:8px;">AI测试用例生成模块·AiToCase</h1>
+
+        </header>
+
+        <div class="main-content">
+            <!-- 左侧：输入区域 -->
+            <div class="left-panel">
+                <h2>输入信息</h2>
+
+                <!-- 选项卡切换 -->
+                <div class="tab-container">
+                    <div class="tab-buttons">
+                        <button class="tab-btn active" data-tab="upload-doc">上传需求</button>
+                        <button class="tab-btn" data-tab="upload-axure">上传Axure原型</button>
+                        <button class="tab-btn" data-tab="upload-image">上传图片</button>
+                        <button class="tab-btn" data-tab="manual-input">手动输入需求</button>
+<!--?                        <button class="tab-btn" data-tab="knowledge-base">知识库管理</button>-->
+                    </div>
+
+                    <!-- 上传需求文档 -->
+                    <div class="tab-content active" id="upload-doc">
+                        <div class="form-group">
+                            <label>上传需求文档 (支持 PDF/Word/TXT/MD)</label>
+                            <div class="upload-mode-selector">
+                                <label class="radio-inline">
+                                    <input type="radio" name="uploadMode" value="vectorize" checked onchange="handleUploadModeChange()">
+                                    <span>上传并向量化</span>
+                                </label>
+                                <label class="radio-inline">
+                                    <input type="radio" name="uploadMode" value="parse" onchange="handleUploadModeChange()">
+                                    <span>上传并解析</span>
+                                </label>
+                            </div>
+                            <input type="file" id="docFile" accept=".txt,.md,.pdf,.docx,.doc">
+                            <button class="btn btn-secondary" id="uploadBtn" onclick="uploadDocumentChroma()">上传并向量化</button>
+                        </div>
+                        <!-- 局部加载动画 -->
+                        <div id="uploadLocalLoading" class="inline-loading">
+                            <div class="local-loading-spinner"></div>
+                            <div class="local-loading-text">正在处理...</div>
+                        </div>
+                        <div id="docUploadResult" class="result-box hidden"></div>
+
+                        <!-- 已上传文档列表 -->
+                        <div class="form-group" id="vectorCollectionsSection">
+                            <label>已上传的文档集合</label>
+                            <div class="collection-controls">
+                                <select id="collectionSelect" style="flex:1;">
+                                    <option value="">-- 请选择文档集合 --</option>
+                                </select>
+                                <button class="btn btn-small btn-secondary" onclick="refreshCollections()">刷新</button>
+                                <button class="btn btn-small btn-danger" onclick="deleteSelectedCollection()">删除</button>
+                            </div>
+                        </div>
+
+                        <div class="form-group" id="vectorQuerySection">
+                            <label id="vectorQueryLabel">输入检索问题（根据问题召回相关需求）</label>
+                            <textarea id="vectorQuery" rows="3" placeholder="例如：用户登录功能的需求是什么？"></textarea>
+                            <div class="search-controls">
+                                <label class="control-inline" id="topKLabel">召回数量：<input type="number" id="topK" value="5" min="1" max="20" style="width:50px;"></label>
+                                <label class="radio-inline">
+                                    <input type="radio" name="queryMode" value="raw" checked onchange="handleQueryModeChange()">
+                                    <span>直接召回</span>
+                                </label>
+                                <label class="radio-inline">
+                                    <input type="radio" name="queryMode" value="refine" onchange="handleQueryModeChange()">
+                                    <span>AI整理召回</span>
+                                </label>
+                                <div class="flex-spacer"></div>
+                                <button class="btn btn-primary" onclick="queryChromaVector()">开始检索</button>
+                            </div>
+                        </div>
+                        <div id="vectorQueryResult" class="result-box hidden">
+                            <label>召回结果：</label>
+                            <div class="view-toggle">
+                                <button class="active" onclick="toggleVectorView('source')">源码</button>
+                                <button onclick="toggleVectorView('preview')">预览</button>
+                            </div>
+                            <div id="vectorSplitView">
+                                <textarea id="vectorResultText" rows="10" style="resize: vertical; min-height: 200px; width: 100%;"></textarea>
+                                <div id="vectorPreview" class="markdown-preview hidden" contenteditable="true"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 上传Axure原型 -->
+                    <div class="tab-content" id="upload-axure">
+                        <!-- 文件上传（ZIP/HTML） -->
+                        <div id="axureFileInput" class="form-group">
+                            <label>上传Axure原型包 (ZIP/HTML)</label>
+                            <input type="file" id="axureFile" accept=".zip,.html,.htm">
+                        </div>
+
+                        <div class="axure-controls">
+                            <label class="radio-inline">
+                                <input type="radio" name="axureContentMode" value="full" checked>
+                                <span>全量内容</span>
+                            </label>
+                            <label class="radio-inline">
+                                <input type="radio" name="axureContentMode" value="incremental">
+                                <span>增量需求（蓝色字体）</span>
+                            </label>
+                            <label class="checkbox-inline">
+                                <input type="checkbox" id="axureAiRefine" checked>
+                                <span>AI结构化</span>
+                            </label>
+<!--?                            <label class="checkbox-inline">-->
+<!--?                                <input type="checkbox" id="axureRecursive">-->
+<!--?                                <span>递归解析链接</span>-->
+<!--?                            </label>-->
+                            <div class="flex-spacer"></div>
+                            <button class="btn btn-secondary" onclick="fetchAxure()">获取Axure</button>
+                        </div>
+                        <!-- 局部加载动画 -->
+                        <div id="axureLocalLoading" class="inline-loading">
+                            <div class="local-loading-spinner"></div>
+                            <div class="local-loading-text">正在获取Axure内容...</div>
+                        </div>
+                        <div class="collapsible" id="axureResultCollapsible">
+                            <button class="collapsible-btn" onclick="toggleCollapsible(this)">▶ 解析结果（Markdown格式）</button>
+                            <div class="collapsible-content">
+                                <div class="view-toggle">
+                                    <button class="active" onclick="toggleAxureView('source')">源码</button>
+                                    <button onclick="toggleAxureView('preview')">预览</button>
+                                </div>
+                                <div id="splitView">
+                                    <textarea id="axureContent" rows="10">这里是测试内容，用于调试自适应高度。
+第二行内容
+第三行内容
+第四行内容
+第五行内容</textarea>
+                                    <div id="axurePreview" class="markdown-preview hidden" contenteditable="true"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 上传图片 -->
+                    <div class="tab-content" id="upload-image">
+                        <!-- 视觉模型选择 -->
+                        <div class="form-group">
+                            <label>选择视觉识别模型</label>
+                            <div class="radio-group">
+                                <label><input type="radio" name="visionProvider" value="doubao" > 豆包</label>
+                                <label><input type="radio" name="visionProvider" value="aliyun" checked> 阿里云</label>
+                            </div>
+                        </div>
+
+                        <!-- 图片识别提示词 -->
+                        <div class="form-group">
+                            <label>图片识别提示词（可自定义）</label>
+                            <textarea id="visionPrompt" rows="4" placeholder="请识别图片中的内容...">请识别这张图片中的所有文字内容，并100%还原原始格式和布局。
+
+要求：
+1. 如果图片包含表格，必须使用 Markdown 表格格式输出
+2. 表格要求完整保留所有行和列，不要遗漏任何单元格
+3. 非表格内容（如表单、字段列表、按钮、标签等），同一行的内容必须保持在同一行
+4. 只输出识别到的内容，不要添加任何解释、说明或总结
+5. 保持原文的语言（中文/英文等），不要翻译</textarea>
+                        </div>
+
+                        <div class="image-preview" id="imagePreview"></div>
+                        <div class="image-count" id="imageCount" style="display:none;">
+                            已选择 <span id="selectedCount">0</span> 张图片
+                        </div>
+                        <div class="action-buttons-row">
+                            <button class="btn btn-primary" onclick="pasteFromClipboard()">📋 粘贴并识别（粘贴板）</button>
+                            <button class="btn btn-success" onclick="uploadImages()">🔍 识别图片（复制图片）</button>
+                            <button class="btn btn-danger" onclick="clearImages()">🗑️ 清除全部</button>
+                        </div>
+                        <div class="form-group" id="ocrResultSection" style="display:none;">
+                            <label>图片解析结果（可编辑补充为需求）</label>
+                            <textarea id="ocrResult" rows="8" placeholder="识别结果将显示在这里..."></textarea>
+                        </div>
+                    </div>
+
+                    <!-- 手动输入需求 -->
+                    <div class="tab-content" id="manual-input">
+                        <div class="form-group">
+                            <label>请输入需求描述</label>
+                            <textarea id="manualText" rows="10" placeholder="在此输入需求描述..."></textarea>
+                        </div>
+                    </div>
+
+                    <!-- 知识库管理 -->
+                    <div class="tab-content" id="knowledge-base">
+                        <!-- 已创建的知识库列表 -->
+                        <div class="form-group">
+                            <label>已创建的知识库</label>
+                            <div class="collection-controls">
+                                <select id="kbSelect" style="flex:1;">
+                                    <option value="">-- 请选择知识库 --</option>
+                                </select>
+                                <button class="btn btn-small btn-secondary" onclick="refreshKnowledgeBases()">刷新</button>
+                                <button class="btn btn-small btn-danger" onclick="deleteSelectedKB()">删除</button>
+                            </div>
+                        </div>
+
+                        <!-- 知识库创建面板 -->
+                        <div id="enhancedKbPanel" class="kb-create-panel">
+                            <div class="collapsible">
+                                <button class="collapsible-btn" onclick="toggleCollapsible(this)">▶ 创建知识库</button>
+                                <div class="collapsible-content">
+                                    <div class="form-group">
+                                        <label>知识库名称 *</label>
+                                        <input type="text" id="kbEnhancedName" placeholder="例如：集中支付产品-知识库">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Axure 原型链接 *</label>
+                                        <input type="text" id="kbEnhancedAxureUrl" placeholder="https://modao.cc/...">
+                                        <small style="color: #666; display: block; margin-top: 5px;">
+                                            会自动识别蓝色字体（增量内容）并分层存储
+                                        </small>
+                                    </div>
+                                    <button class="btn btn-success" onclick="createEnhancedKB()">创建知识库</button>
+                                    <div id="kbEnhancedLoading" class="inline-loading">
+                                        <div class="local-loading-spinner"></div>
+                                        <div class="local-loading-text">正在创建知识库，这可能需要几分钟...</div>
+                                    </div>
+                                    <div id="kbEnhancedResult" class="result-box hidden"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 智能查询面板 -->
+                        <div class="form-group" id="kbQuerySection" style="display:none;">
+                            <textarea id="kbSmartQueryText" rows="3" placeholder="例如：集中支付产品的新增功能..."></textarea>
+
+                            <div class="search-controls" style="flex-wrap: wrap;">
+                                <label>召回数量：</label>
+                                <input type="number" id="kbTopK" value="5" min="1" max="20" style="width:50px;">
+                                <label>
+                                    <input type="checkbox" id="kbUseAIStructure" checked>
+                                    AI结构化
+                                </label>
+                                <div class="flex-spacer"></div>
+                                <button class="btn btn-primary" onclick="smartRecallFromKB()">智能召回</button>
+                            </div>
+                        </div>
+
+                        <!-- 召回结果显示（预览模式，支持编辑） -->
+                        <div id="kbRecallResult" class="result-box hidden">
+                            <label>召回结果：</label>
+                            <!-- 召回内容选项卡 -->
+                            <div class="recall-tabs" id="recallContentTabs" style="display: none;">
+                                <button class="recall-tab-btn active" data-tab="combined">组合视图</button>
+                                <button class="recall-tab-btn" data-tab="incremental">🔵 蓝色增量</button>
+                                <button class="recall-tab-btn" data-tab="page_full">📄 页面全量</button>
+                                <button class="recall-tab-btn" data-tab="context">📦 模块全量</button>
+                            </div>
+                            <div id="splitViewRecall" class="split-view preview-only">
+                                <textarea id="kbRecallSourceText" rows="12" class="hidden" style="resize: vertical; min-height: 250px; font-family: monospace; font-size: 13px;"></textarea>
+                                <div id="kbRecallPreviewText" class="markdown-preview" contenteditable="true"></div>
+                            </div>
+                        </div>
+                        <div id="kbTestPointsResult" class="result-box hidden">
+                            <label>生成的测试点：</label>
+                            <textarea id="kbTestPointsText" rows="6" style="resize: vertical; min-height: 100px; width: 100%;"></textarea>
+                        </div>
+                        <div id="kbQueryLoading" class="inline-loading">
+                            <div class="local-loading-spinner"></div>
+                            <div class="local-loading-text">正在处理...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 测试用例参数 -->
+                <div class="params-section">
+                    <div class="params-grid">
+                        <div class="form-group">
+                            <label>模块名称 *</label>
+                            <input type="text" id="testModule" value="模块">
+                        </div>
+                        <div class="form-group">
+                            <label>菜单1 (选填)</label>
+                            <input type="text" id="menu1" value="菜单1">
+                        </div>
+                        <div class="form-group">
+                            <label>菜单2 (选填)</label>
+                            <input type="text" id="menu2" value="菜单2">
+                        </div>
+                        <div class="form-group">
+                            <label>用例数量 (-1为AI判断)</label>
+                            <input type="number" id="testCaseCount" value="-1" min="-1" max="100">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 提示词模板 -->
+                <div class="prompt-section">
+                    <div class="collapsible">
+                        <button class="collapsible-btn" onclick="toggleCollapsible(this)">▶ 提示词模板</button>
+                        <div class="collapsible-content">
+                            <div class="form-group">
+                                <label>输入提示词</label>
+                                <textarea id="promptText" rows="8" placeholder="加载中..."></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 选择大模型通道 -->
+                <div class="provider-section">
+                    <h3>选择大模型通道</h3>
+                    <div class="radio-group">
+                        <label><input type="radio" name="provider" value="azure"> Azure</label>
+                        <label><input type="radio" name="provider" value="aliyun" checked> 阿里云</label>
+                        <label><input type="radio" name="provider" value="doubao"> 豆包</label>
+                        <label><input type="radio" name="provider" value="deepseek"> DeepSeek</label>
+                    </div>
+                </div>
+
+                <!-- 生成按钮 -->
+                <div class="action-buttons">
+                    <button class="btn btn-success btn-large" id="generateBtn" onclick="generateTestCases()">🚀 生成测试用例</button>
+                    <button class="btn btn-danger btn-large hidden" id="stopBtn" onclick="stopGeneration()">⏹️ 终止生成</button>
+                </div>
+            </div>
+
+            <!-- 右侧：结果显示 -->
+            <div class="right-panel">
+                <h2>生成的测试用例结果</h2>
+
+                <!-- 系统提示词（可折叠） -->
+                <div class="collapsible" id="systemMessageSection" style="display:none;">
+                    <button class="collapsible-btn" onclick="toggleCollapsible(this)">▶ 查看提示词</button>
+                    <div class="collapsible-content">
+                        <div class="view-toggle">
+                            <button class="active" onclick="togglePromptView('source')">源码</button>
+                            <button onclick="togglePromptView('preview')">预览</button>
+                        </div>
+                        <div id="promptSplitView">
+                            <textarea id="systemMessage" rows="8" readonly></textarea>
+                            <div id="promptPreview" class="markdown-preview hidden"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- AI生成过程（流式输出） -->
+                <div class="collapsible" id="streamSection" style="display:none;">
+                    <button class="collapsible-btn active" onclick="toggleCollapsible(this)">▼ 🤖 AI 生成过程</button>
+                    <div class="collapsible-content show">
+                        <div id="streamOutput" class="stream-output"></div>
+                        <div id="streamStatus" class="status-message"></div>
+                    </div>
+                </div>
+
+                <!-- 测试用例列表 -->
+                <div id="testCasesList" class="test-cases-list"></div>
+
+                <!-- 下载按钮 -->
+                <div id="downloadSection" class="download-section" style="display:none;">
+                    <h3>下载测试用例</h3>
+                    <div class="form-group">
+                        <label>下载XMind重命名（选填，留空则使用默认名称）</label>
+                        <input type="text" id="exportFileName" placeholder="例如：登录模块测试用例">
+                    </div>
+                    <div class="download-buttons">
+                        <button class="btn btn-secondary" onclick="exportCSV()">📊 下载 CSV</button>
+                        <button class="btn btn-secondary" onclick="exportMarkdown()">📝 下载 Markdown</button>
+                        <button class="btn btn-secondary" onclick="exportXmind()">🧠 下载 XMind</button>
+                        <button class="btn btn-secondary" onclick="copyXmindText()">📋 复制 XMind</button>
+                    </div>
+
+                    <!-- XMind粘贴文本（可折叠） -->
+                    <div class="collapsible">
+                        <button class="collapsible-btn" onclick="toggleCollapsible(this)">▶ 查看 XMind 粘贴文本</button>
+                        <div class="collapsible-content">
+                            <textarea id="xmindText" rows="8" readonly></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 加载提示 -->
+    <div id="loadingOverlay" class="loading-overlay hidden">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">处理中...</div>
+    </div>
+
+    <!-- Toast提示 -->
+    <div id="toast" class="toast hidden"></div>
+
+    <script>
+        // 存储提示词模板（从API加载）
+        let prompts = {
+            default: ''
+        };
+
+        // 存储当前测试用例
+        let currentTestCases = null;
+        let currentPersistDir = null;
+        let currentCollectionName = null;
+
+        // 存储粘贴的图片文件
+        let pastedImages = [];
+
+        // 存储当前的AbortController用于终止请求
+        let currentAbortController = null;
+
+        // 存储Axure解析结果（全量和增量）
+        let axureFullContent = '';      // 全量内容
+        let axureIncrementalContent = ''; // 增量内容
+
+        // 页面加载时获取提示词
+        document.addEventListener('DOMContentLoaded', async function() {
+            try {
+                const response = await fetch('/api/prompts');
+                const data = await response.json();
+                prompts.default = data.prompt_default || '';
+                // 设置默认提示词
+                document.getElementById('promptText').value = prompts.default;
+            } catch (error) {
+                console.error('加载提示词失败:', error);
+            }
+
+            // 初始化粘贴区域事件
+            initPasteArea();
+
+            // 加载已有的文档集合
+            refreshCollections();
+        });
+
+        // ==================== 选项卡切换 ====================
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                // 移除所有active
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+                // 添加active到当前
+                this.classList.add('active');
+                document.getElementById(this.dataset.tab).classList.add('active');
+            });
+        });
+
+        // ==================== 工具函数 ====================
+        function showLoading(text = '处理中...') {
+            document.querySelector('.loading-text').textContent = text;
+            document.getElementById('loadingOverlay').classList.remove('hidden');
+        }
+
+        function hideLoading() {
+            document.getElementById('loadingOverlay').classList.add('hidden');
+        }
+
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast ${type}`;
+            toast.classList.remove('hidden');
+            setTimeout(() => toast.classList.add('hidden'), 3000);
+        }
+
+        // ==================== 局部加载函数 ====================
+        function showLocalLoading(elementId, text = '处理中...') {
+            const loadingEl = document.getElementById(elementId);
+            if (loadingEl) {
+                const textEl = loadingEl.querySelector('.local-loading-text');
+                if (textEl) {
+                    textEl.textContent = text;
+                }
+                loadingEl.classList.add('show');
+            }
+        }
+
+        function hideLocalLoading(elementId) {
+            const loadingEl = document.getElementById(elementId);
+            if (loadingEl) {
+                loadingEl.classList.remove('show');
+            }
+        }
+
+        function toggleCollapsible(btn) {
+            const content = btn.nextElementSibling;
+            const isExpanded = content.classList.contains('show');
+
+            if (isExpanded) {
+                content.classList.remove('show');
+                btn.textContent = btn.textContent.replace('▼', '▶');
+            } else {
+                content.classList.add('show');
+                btn.textContent = btn.textContent.replace('▶', '▼');
+            }
+        }
+
+        function getSelectedProvider() {
+            return document.querySelector('input[name="provider"]:checked').value;
+        }
+
+        // ==================== Chroma 文档上传与检索 ====================
+
+        // 刷新文档集合列表
+        async function refreshCollections() {
+            try {
+                const response = await fetch('/api/chroma/collections');
+                const data = await response.json();
+
+                const select = document.getElementById('collectionSelect');
+                select.innerHTML = '<option value="">-- 请选择文档集合 --</option>';
+
+                if (data.success && data.collections) {
+                    for (const col of data.collections) {
+                        const option = document.createElement('option');
+                        option.value = col.name;
+                        // 显示文件名和文档块数量
+                        const filename = col.metadata?.filename || col.name;
+                        option.textContent = `${filename} (${col.count} 块)`;
+                        select.appendChild(option);
+                    }
+                }
+
+                // 如果有当前选中的collection，保持选中状态
+                if (currentCollectionName) {
+                    select.value = currentCollectionName;
+                }
+            } catch (error) {
+                console.error('加载文档集合失败:', error);
+            }
+        }
+
+        // 上传文档到 Chroma
+        async function uploadDocumentChroma() {
+            const fileInput = document.getElementById('docFile');
+            if (!fileInput.files.length) {
+                showToast('请先选择文件', 'error');
+                return;
+            }
+
+            const uploadMode = document.querySelector('input[name="uploadMode"]:checked').value;
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('parse_only', uploadMode === 'parse' ? 'true' : 'false');
+
+            if (uploadMode === 'parse') {
+                showLocalLoading('uploadLocalLoading', '正在解析文档（包含图片OCR）并进行AI整理...');
+            } else {
+                showLocalLoading('uploadLocalLoading', '正在解析并向量化文档...');
+            }
+
+            try {
+                const response = await fetch('/api/chroma/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    if (data.parse_only) {
+                        // 上传并解析模式：直接显示解析结果
+                        document.getElementById('docUploadResult').textContent = data.message;
+                        document.getElementById('docUploadResult').classList.remove('hidden');
+
+                        // 显示解析结果
+                        const resultText = data.refined_content || data.parsed_content;
+                        document.getElementById('vectorResultText').value = resultText;
+                        document.getElementById('vectorQueryResult').classList.remove('hidden');
+
+                        // 重置视图为源码模式并调整高度
+                        resetVectorViewToSource();
+                        setTimeout(() => {
+                            autoResizeTextarea(document.getElementById('vectorResultText'));
+                        }, 100);
+
+                        showToast('文档解析完成', 'success');
+                    } else {
+                        // 上传并向量化模式
+                        currentCollectionName = data.collection_name;
+                        document.getElementById('docUploadResult').textContent = data.message;
+                        document.getElementById('docUploadResult').classList.remove('hidden');
+
+                        // 刷新集合列表并选中
+                        await refreshCollections();
+                        document.getElementById('collectionSelect').value = currentCollectionName;
+
+                        // 根据是否已存在显示不同提示
+                        if (data.already_exists) {
+                            showToast('该文档已向量化，已自动选中', 'info');
+                        } else {
+                            showToast('文档向量化成功', 'success');
+                        }
+                    }
+                } else {
+                    throw new Error(data.detail);
+                }
+            } catch (error) {
+                showToast('上传失败: ' + error.message, 'error');
+            } finally {
+                hideLocalLoading('uploadLocalLoading');
+            }
+        }
+
+        // 处理上传模式变化
+        function handleUploadModeChange() {
+            const uploadMode = document.querySelector('input[name="uploadMode"]:checked').value;
+            const uploadBtn = document.getElementById('uploadBtn');
+            const collectionsSection = document.getElementById('vectorCollectionsSection');
+            const querySection = document.getElementById('vectorQuerySection');
+            const fileInput = document.getElementById('docFile');
+            const uploadResult = document.getElementById('docUploadResult');
+            const queryResult = document.getElementById('vectorQueryResult');
+
+            // 清空文件选择和结果
+            if (fileInput) {
+                fileInput.value = '';
+            }
+            if (uploadResult) {
+                uploadResult.classList.add('hidden');
+                uploadResult.textContent = '';
+            }
+            if (queryResult) {
+                queryResult.classList.add('hidden');
+                document.getElementById('vectorResultText').value = '';
+            }
+
+            if (uploadMode === 'parse') {
+                // 上传并解析模式
+                uploadBtn.textContent = '上传并解析';
+                // 隐藏文档集合列表和检索部分
+                if (collectionsSection) collectionsSection.style.display = 'none';
+                if (querySection) querySection.style.display = 'none';
+            } else {
+                // 上传并向量化模式
+                uploadBtn.textContent = '上传并向量化';
+                // 显示文档集合列表和检索部分
+                if (collectionsSection) collectionsSection.style.display = '';
+                if (querySection) querySection.style.display = '';
+            }
+        }
+
+        // 删除选中的文档集合
+        async function deleteSelectedCollection() {
+            const select = document.getElementById('collectionSelect');
+            const collectionName = select.value;
+
+            if (!collectionName) {
+                showToast('请先选择要删除的文档集合', 'error');
+                return;
+            }
+
+            if (!confirm(`确定要删除文档集合 "${collectionName}" 吗？此操作不可恢复。`)) {
+                return;
+            }
+
+            showLoading('正在删除...');
+            try {
+                const response = await fetch(`/api/chroma/collection/${collectionName}`, {
+                    method: 'DELETE'
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    if (currentCollectionName === collectionName) {
+                        currentCollectionName = null;
+                    }
+                    await refreshCollections();
+                    showToast('删除成功', 'success');
+                } else {
+                    throw new Error(data.detail);
+                }
+            } catch (error) {
+                showToast('删除失败: ' + error.message, 'error');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // 处理查询模式变化
+        function handleQueryModeChange() {
+            // 目前只有 raw 和 refine 两种模式，不需要特殊处理
+            // 保留此函数以备将来扩展
+        }
+
+        // 向量检索（统一接口）
+        async function queryChromaVector() {
+            const collectionName = document.getElementById('collectionSelect').value;
+            const queryMode = document.querySelector('input[name="queryMode"]:checked').value;
+            const topK = parseInt(document.getElementById('topK').value) || 5;
+
+            if (!collectionName) {
+                showToast('请先选择文档集合', 'error');
+                return;
+            }
+
+            // 获取查询文本
+            const queryText = document.getElementById('vectorQuery').value.trim();
+            if (!queryText) {
+                showToast('请输入检索问题', 'error');
+                return;
+            }
+
+            // 清空之前的结果
+            document.getElementById('vectorResultText').value = '';
+            document.getElementById('vectorQueryResult').classList.add('hidden');
+
+            // AI整理召回模式使用AI整理
+            const useAiRefine = queryMode === 'refine';
+
+            showLoading(useAiRefine ? '正在检索并AI整理...' : '正在检索...');
+            try {
+                const response = await fetch('/api/chroma/query', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        collection_name: collectionName,
+                        query_text: queryText,
+                        top_k: topK,
+                        use_ai_refine: useAiRefine,
+                        recall_all: false,
+                        provider: getSelectedProvider()
+                    })
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    // 根据模式显示不同结果
+                    const resultText = useAiRefine && data.refined_content
+                        ? data.refined_content
+                        : data.context;
+
+                    document.getElementById('vectorResultText').value = resultText;
+                    document.getElementById('vectorQueryResult').classList.remove('hidden');
+
+                    // 重置视图为源码模式并调整高度
+                    resetVectorViewToSource();
+                    setTimeout(() => {
+                        autoResizeTextarea(document.getElementById('vectorResultText'));
+                    }, 100);
+
+                    showToast(`检索完成，召回 ${data.total_chunks} 个相关片段`, 'success');
+                } else {
+                    throw new Error(data.detail || '检索失败');
+                }
+            } catch (error) {
+                showToast('检索失败: ' + error.message, 'error');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // ==================== 知识库管理（旧版兼容） ====================
+
+        // 当前选中的知识库
+        let currentKBName = null;
+
+        // 删除选中的知识库
+        async function deleteSelectedKB() {
+            const select = document.getElementById('kbSelect');
+            const collectionName = select.value;
+
+            if (!collectionName) {
+                showToast('请先选择要删除的知识库', 'error');
+                return;
+            }
+
+            if (!confirm(`确定要删除知识库 "${collectionName}" 吗？此操作不可恢复。`)) {
+                return;
+            }
+
+            showLoading('正在删除...');
+            try {
+                const response = await fetch(`/api/kb/${collectionName}`, {
+                    method: 'DELETE'
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    if (currentKBName === collectionName) {
+                        currentKBName = null;
+                    }
+                    document.getElementById('kbQuerySection').style.display = 'none';
+                    document.getElementById('kbRecallResult').classList.add('hidden');
+                    document.getElementById('kbTestPointsResult').classList.add('hidden');
+                    await refreshKnowledgeBases();
+                    showToast('删除成功', 'success');
+                } else {
+                    throw new Error(data.detail);
+                }
+            } catch (error) {
+                showToast('删除失败: ' + error.message, 'error');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // 从知识库召回内容
+        async function recallFromKB() {
+            const collectionName = document.getElementById('kbSelect').value;
+            const queryText = document.getElementById('kbQueryText').value.trim();
+            const topK = parseInt(document.getElementById('kbTopK').value) || 5;
+
+            if (!collectionName) {
+                showToast('请先选择知识库', 'error');
+                return;
+            }
+            if (!queryText) {
+                showToast('请输入需求描述', 'error');
+                return;
+            }
+
+            // 清空之前的结果
+            document.getElementById('kbRecallText').value = '';
+            document.getElementById('kbRecallResult').classList.add('hidden');
+
+            showLocalLoading('kbQueryLoading', '正在从知识库召回相关内容...');
+            try {
+                const response = await fetch('/api/kb/recall', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        collection_name: collectionName,
+                        query_text: queryText,
+                        top_k: topK
+                    })
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    document.getElementById('kbRecallText').value = data.context || '（无召回内容）';
+                    document.getElementById('kbRecallResult').classList.remove('hidden');
+                    showToast(`召回完成，获取 ${data.total_chunks} 个相关片段`, 'success');
+                } else {
+                    throw new Error(data.detail || '召回失败');
+                }
+            } catch (error) {
+                showToast('召回失败: ' + error.message, 'error');
+            } finally {
+                hideLocalLoading('kbQueryLoading');
+            }
+        }
+
+        // 从知识库生成测试用例（完整流程）
+        async function generateTestCasesFromKB() {
+            const collectionName = document.getElementById('kbSelect').value;
+            const queryText = document.getElementById('kbQueryText').value.trim();
+            const topK = parseInt(document.getElementById('kbTopK').value) || 5;
+            const testModule = document.getElementById('testModule').value.trim() || '模块';
+
+            if (!collectionName) {
+                showToast('请先选择知识库', 'error');
+                return;
+            }
+            if (!queryText) {
+                showToast('请输入需求描述', 'error');
+                return;
+            }
+
+            // 清空之前的结果
+            document.getElementById('kbRecallText').value = '';
+            document.getElementById('kbRecallResult').classList.add('hidden');
+            document.getElementById('kbTestPointsText').value = '';
+            document.getElementById('kbTestPointsResult').classList.add('hidden');
+
+            showLocalLoading('kbQueryLoading', '正在从知识库生成测试用例，请稍候...');
+            try {
+                const response = await fetch('/api/kb/generate-test-cases', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        collection_name: collectionName,
+                        requirement: queryText,
+                        test_module: testModule,
+                        top_k: topK,
+                        provider: getSelectedProvider()
+                    })
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    // 显示召回内容
+                    document.getElementById('kbRecallText').value = data.context || '（无召回内容）';
+                    document.getElementById('kbRecallResult').classList.remove('hidden');
+
+                    // 显示测试点
+                    if (data.test_points && data.test_points.length > 0) {
+                        document.getElementById('kbTestPointsText').value = data.test_points.join('\n');
+                        document.getElementById('kbTestPointsResult').classList.remove('hidden');
+                    }
+
+                    // 如果有测试用例，更新到右侧结果区域
+                    if (data.test_cases) {
+                        currentTestCases = data.test_cases;
+                        displayTestCases(currentTestCases);
+                        document.getElementById('downloadSection').style.display = 'block';
+                        loadXmindText();
+                    }
+
+                    showToast(`成功生成 ${data.test_cases?.test_cases?.length || 0} 个测试用例`, 'success');
+                } else {
+                    throw new Error(data.detail || '生成失败');
+                }
+            } catch (error) {
+                showToast('生成测试用例失败: ' + error.message, 'error');
+            } finally {
+                hideLocalLoading('kbQueryLoading');
+            }
+        }
+
+        // ==================== 知识库管理 ====================
+
+        // 创建知识库
+        async function createEnhancedKB() {
+            const name = document.getElementById('kbEnhancedName').value.trim();
+            const axureUrl = document.getElementById('kbEnhancedAxureUrl').value.trim();
+
+            if (!name) {
+                showToast('请输入知识库名称', 'error');
+                return;
+            }
+            if (!axureUrl) {
+                showToast('请输入Axure原型链接', 'error');
+                return;
+            }
+
+            showLocalLoading('kbEnhancedLoading', '正在创建知识库，这可能需要几分钟...');
+            document.getElementById('kbEnhancedResult').classList.add('hidden');
+
+            try {
+                const response = await fetch('/api/kb/enhanced/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: name,
+                        axure_url: axureUrl
+                    })
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    document.getElementById('kbEnhancedResult').textContent = data.message;
+                    document.getElementById('kbEnhancedResult').classList.remove('hidden');
+
+                    // 清空输入
+                    document.getElementById('kbEnhancedName').value = '';
+                    document.getElementById('kbEnhancedAxureUrl').value = '';
+
+                    // 刷新列表并选中
+                    await refreshKnowledgeBases();
+                    const select = document.getElementById('kbSelect');
+                    select.value = data.collection_name;
+
+                    // 显示查询区域
+                    document.getElementById('kbQuerySection').style.display = 'block';
+
+                    showToast('知识库创建成功', 'success');
+                } else {
+                    throw new Error(data.detail || '创建失败');
+                }
+            } catch (error) {
+                showToast('创建知识库失败: ' + error.message, 'error');
+            } finally {
+                hideLocalLoading('kbEnhancedLoading');
+            }
+        }
+
+        // 智能召回
+        async function smartRecallFromKB() {
+            const collectionName = document.getElementById('kbSelect').value;
+            const queryText = document.getElementById('kbSmartQueryText').value.trim();
+            const topK = parseInt(document.getElementById('kbTopK').value) || 5;
+            const useAIStructure = document.getElementById('kbUseAIStructure').checked;
+
+            if (!collectionName) {
+                showToast('请先选择知识库', 'error');
+                return;
+            }
+            if (!queryText) {
+                showToast('请输入查询内容', 'error');
+                return;
+            }
+
+            // 清空之前的结果
+            document.getElementById('kbRecallSourceText').value = '';
+            document.getElementById('kbRecallPreviewText').innerHTML = '';
+            document.getElementById('kbRecallResult').classList.add('hidden');
+
+            showLocalLoading('kbQueryLoading', '正在智能召回...');
+            try {
+                const response = await fetch('/api/kb/enhanced/smart-recall', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        collection_name: collectionName,
+                        query: queryText,
+                        top_k: topK,
+                        use_ai_structure: useAIStructure
+                    })
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    // 保存所有召回数据到全局变量
+                    window.currentRecallData = {
+                        combined: data.combined || '',
+                        incremental: data.incremental?.documents?.[0] || '',
+                        page_full: data.page_full?.documents?.[0] || '',
+                        context: data.context?.documents?.[0] || '',
+                        structured: data.structured || '',
+                        use_ai_structure: useAIStructure && data.structured,
+                        strategy: data.strategy
+                    };
+
+                    // 判断是否显示选项卡（有增量数据时才显示）
+                    const tabsDiv = document.getElementById('recallContentTabs');
+                    if (data.incremental || data.page_full || data.context) {
+                        tabsDiv.style.display = 'flex';
+                        // 重置选项卡为组合视图
+                        switchRecallTab('combined');
+                    } else {
+                        tabsDiv.style.display = 'none';
+                    }
+
+                    // 渲染当前选中内容
+                    renderCurrentRecallContent();
+
+                    // 显示结果区域
+                    document.getElementById('kbRecallResult').classList.remove('hidden');
+
+                    showToast('召回完成', 'success');
+                } else {
+                    throw new Error(data.detail || '召回失败');
+                }
+            } catch (error) {
+                showToast('智能召回失败: ' + error.message, 'error');
+            } finally {
+                hideLocalLoading('kbQueryLoading');
+            }
+        }
+
+        // 当前选中的召回内容选项卡
+        let currentRecallTab = 'combined';
+
+        // 切换召回内容选项卡
+        function switchRecallTab(tabName) {
+            currentRecallTab = tabName;
+
+            // 更新选项卡按钮状态
+            document.querySelectorAll('.recall-tab-btn').forEach(btn => {
+                if (btn.dataset.tab === tabName) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+
+            // 重新渲染内容
+            renderCurrentRecallContent();
+        }
+
+        // 渲染当前选中的召回内容
+        function renderCurrentRecallContent() {
+            if (!window.currentRecallData) return;
+
+            let content = '';
+
+            if (currentRecallTab === 'combined') {
+                // 如果启用了 AI 结构化且存在 structured 字段，使用 structured；否则使用 combined
+                if (window.currentRecallData.use_ai_structure && window.currentRecallData.structured) {
+                    content = window.currentRecallData.structured;
+                    console.log('[召回内容] 使用 AI 结构化后的内容');
+                } else {
+                    content = window.currentRecallData.combined || '';
+                    console.log('[召回内容] 使用原始 combined 内容');
+                }
+            } else if (currentRecallTab === 'incremental') {
+                content = window.currentRecallData.incremental || '（无蓝色增量内容）';
+            } else if (currentRecallTab === 'page_full') {
+                content = window.currentRecallData.page_full || '（无页面全量内容）';
+            } else if (currentRecallTab === 'context') {
+                content = window.currentRecallData.context || '（无模块全量内容）';
+            }
+
+            // 填充到源码区域
+            document.getElementById('kbRecallSourceText').value = content || '暂无内容';
+
+            // 渲染预览
+            renderRecallPreview(content || '暂无内容');
+        }
+
+        // 添加选项卡点击事件监听
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('.recall-tab-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    switchRecallTab(this.dataset.tab);
+                });
+            });
+        });
+
+        // 渲染召回结果的预览（复用 renderMarkdown，支持表格、Mermaid等）
+        async function renderRecallPreview(content) {
+            const previewDiv = document.getElementById('kbRecallPreviewText');
+            if (!content) {
+                previewDiv.innerHTML = '<p style="color: #999;">暂无内容</p>';
+                return;
+            }
+
+            // 复用 renderMarkdown 函数，确保与 Axure 预览一致的渲染效果
+            await renderMarkdown(content, previewDiv);
+        }
+
+        // 监听召回预览区编辑，同步回源码
+        document.getElementById('kbRecallPreviewText').addEventListener('input', function() {
+            if (isSyncing) return;
+            isSyncing = true;
+            const markdown = turndownService.turndown(this.innerHTML);
+            document.getElementById('kbRecallSourceText').value = markdown;
+            isSyncing = false;
+        });
+
+        // 使用智能召回生成测试用例
+        async function generateTestCasesSmart() {
+            const collectionName = document.getElementById('kbSelect').value;
+            const queryText = document.getElementById('kbSmartQueryText').value.trim();
+            const testModule = document.getElementById('testModule').value.trim() || '模块';
+            const topK = parseInt(document.getElementById('kbTopK').value) || 5;
+            const provider = getSelectedProvider();
+            const useAIStructure = document.getElementById('kbUseAIStructure').checked;
+
+            if (!collectionName) {
+                showToast('请先选择知识库', 'error');
+                return;
+            }
+            if (!queryText) {
+                showToast('请输入查询内容', 'error');
+                return;
+            }
+
+            // 清空之前的结果
+            document.getElementById('kbRecallSourceText').value = '';
+            document.getElementById('kbRecallPreviewText').innerHTML = '';
+            document.getElementById('kbRecallResult').classList.add('hidden');
+            document.getElementById('kbTestPointsText').value = '';
+            document.getElementById('kbTestPointsResult').classList.add('hidden');
+
+            showLocalLoading('kbQueryLoading', '正在智能召回并生成测试用例...');
+            try {
+                const response = await fetch('/api/kb/enhanced/generate-test-cases', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        collection_name: collectionName,
+                        query: queryText,
+                        test_module: testModule,
+                        top_k: topK,
+                        provider: provider,
+                        use_ai_structure: useAIStructure
+                    })
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    // 显示召回内容
+                    document.getElementById('kbRecallResult').classList.remove('hidden');
+
+                    // 填充召回结果（优先使用 structured）
+                    let displayContent = '';
+                    if (useAIStructure && data.structured) {
+                        displayContent = data.structured;
+                    } else {
+                        displayContent = data.combined || '';
+                    }
+
+                    document.getElementById('kbRecallSourceText').value = displayContent || '未召回到相关内容';
+                    renderRecallPreview(displayContent);
+
+                    // 如果有测试用例，更新到右侧结果区域
+                    if (data.test_cases) {
+                        currentTestCases = data.test_cases;
+                        displayTestCases(currentTestCases);
+                        document.getElementById('downloadSection').style.display = 'block';
+                        loadXmindText();
+                    }
+
+                    showToast(`成功生成 ${data.test_cases?.test_cases?.length || 0} 个测试用例`, 'success');
+                } else {
+                    throw new Error(data.detail || '生成失败');
+                }
+            } catch (error) {
+                showToast('生成测试用例失败: ' + error.message, 'error');
+            } finally {
+                hideLocalLoading('kbQueryLoading');
+            }
+        }
+
+        // 加载知识库列表
+        async function refreshKnowledgeBases() {
+            try {
+                const response = await fetch('/api/kb/enhanced/list');
+                const data = await response.json();
+
+                const select = document.getElementById('kbSelect');
+                select.innerHTML = '<option value="">-- 请选择知识库 --</option>';
+
+                if (data.success && data.knowledge_bases) {
+                    for (const kb of data.knowledge_bases) {
+                        const option = document.createElement('option');
+                        option.value = kb.collection_name;
+                        option.textContent = `${kb.kb_name || kb.collection_name} (${kb.doc_count} 块)`;
+                        select.appendChild(option);
+                    }
+                }
+
+                // 监听选择变化
+                select.onchange = function() {
+                    const querySection = document.getElementById('kbQuerySection');
+                    if (this.value) {
+                        querySection.style.display = 'block';
+                    } else {
+                        querySection.style.display = 'none';
+                    }
+                };
+
+                console.log(`加载了 ${data.knowledge_bases?.length || 0} 个知识库`);
+            } catch (error) {
+                console.error('加载知识库列表失败:', error);
+            }
+        }
+
+        // 页面加载时刷新知识库列表
+        document.addEventListener('DOMContentLoaded', function() {
+            // 延迟加载知识库列表
+            setTimeout(refreshKnowledgeBases, 500);
+        });
+
+        // ==================== 上传需求文档（旧版兼容） ====================
+        async function uploadDocument() {
+            const fileInput = document.getElementById('docFile');
+            if (!fileInput.files.length) {
+                showToast('请先选择文件', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            showLoading('正在向量化文档...');
+            try {
+                const response = await fetch('/api/upload/document', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    currentPersistDir = data.persist_dir;
+                    document.getElementById('docUploadResult').textContent = data.message;
+                    document.getElementById('docUploadResult').classList.remove('hidden');
+                    document.getElementById('vectorQuerySection').style.display = 'block';
+                    showToast('文档向量化成功', 'success');
+                } else {
+                    throw new Error(data.detail);
+                }
+            } catch (error) {
+                showToast('上传失败: ' + error.message, 'error');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // ==================== 向量检索（旧版兼容） ====================
+        async function queryVector() {
+            const question = document.getElementById('vectorQuery').value.trim();
+            if (!question) {
+                showToast('请输入检索内容', 'error');
+                return;
+            }
+
+            showLoading('正在检索...');
+            try {
+                const response = await fetch('/api/vector/query', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        persist_dir: currentPersistDir,
+                        question: question,
+                        provider: getSelectedProvider()
+                    })
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    document.getElementById('vectorQueryResult').textContent = data.filtered_content;
+                    document.getElementById('vectorQueryResult').classList.remove('hidden');
+
+                    // 自动填充到手动输入
+                    document.getElementById('manualText').value = data.filtered_content;
+                    showToast('检索成功', 'success');
+                } else {
+                    throw new Error(data.detail);
+                }
+            } catch (error) {
+                showToast('检索失败: ' + error.message, 'error');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // ==================== 上传Axure原型 ====================
+
+        // 已禁用在线链接模式，固定为文件上传模式
+        // 监听输入方式切换 - 已禁用
+        /*
+        document.querySelectorAll('input[name="axureInputMode"]').forEach(radio => {
+            radio.addEventListener('change', function() {
+                const mode = this.value;
+                if (mode === 'url') {
+                    document.getElementById('axureUrlInput').style.display = 'block';
+                    document.getElementById('axureFileInput').style.display = 'none';
+                } else {
+                    document.getElementById('axureUrlInput').style.display = 'none';
+                    document.getElementById('axureFileInput').style.display = 'block';
+                }
+            });
+        });
+        */
+
+        async function fetchAxure() {
+            // 固定为文件上传模式
+            const contentMode = document.querySelector('input[name="axureContentMode"]:checked').value;
+            const useAiRefine = document.getElementById('axureAiRefine').checked;
+
+            // 清空之前的结果（包括存储的变量和预览区域）
+            document.getElementById('axureContent').value = '';
+            document.getElementById('axurePreview').innerHTML = '';
+            axureFullContent = '';
+            axureIncrementalContent = '';
+
+            // 文件上传模式
+            const fileInput = document.getElementById('axureFile');
+            if (!fileInput.files.length) {
+                showToast('请先选择文件', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('use_md', true);
+            formData.append('use_ai_refine', useAiRefine);
+            formData.append('provider', 'aliyun');  // AI结构化默认使用阿里云
+
+            const loadingText = useAiRefine ? '正在解析并AI结构化Axure原型...' : '正在解析Axure原型...';
+            showLocalLoading('axureLocalLoading', loadingText);
+            try {
+                const response = await fetch('/api/upload/axure', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    // 存储全量和增量内容
+                    axureFullContent = data.full_content || '';
+                    axureIncrementalContent = data.incremental_content || '';
+
+                    // 根据选择的模式显示内容
+                    const content = contentMode === 'incremental'
+                        ? data.incremental_content
+                        : data.full_content;
+
+                    const textarea = document.getElementById('axureContent');
+                    textarea.value = content || '（无内容）';
+
+                    // 重置视图为源码模式
+                    resetAxureViewToSource();
+
+                    // 展开可折叠面板
+                    const collapsible = document.getElementById('axureResultCollapsible');
+                    const btn = collapsible.querySelector('.collapsible-btn');
+                    const contentDiv = collapsible.querySelector('.collapsible-content');
+                    contentDiv.classList.add('show');
+                    btn.textContent = btn.textContent.replace('▶', '▼');
+
+                    // 自动调节高度（延迟确保DOM更新）
+                    setTimeout(() => {
+                        autoResizeTextarea(textarea);
+                    }, 200);
+
+                    showToast('解析成功', 'success');
+                } else {
+                    throw new Error(data.detail);
+                }
+            } catch (error) {
+                showToast('解析失败: ' + error.message, 'error');
+            } finally {
+                hideLocalLoading('axureLocalLoading');
+            }
+        }
+
+        // 保留旧的函数名以兼容
+        async function uploadAxure() {
+            await fetchAxure();
+        }
+
+        // ==================== 上传图片 ====================
+        // 初始化粘贴区域（保留键盘 Ctrl+V 支持）
+        function initPasteArea() {
+            document.addEventListener('paste', function(e) {
+                const activeTab = document.querySelector('.tab-content.active').id;
+                if (activeTab === 'upload-image') {
+                    handlePasteEvent(e);
+                }
+            });
+        }
+
+        // 点击按钮直接从剪贴板读取图片
+        async function pasteFromClipboard() {
+            try {
+                // 使用 Clipboard API 读取剪贴板
+                const clipboardItems = await navigator.clipboard.read();
+                let hasImage = false;
+
+                for (const item of clipboardItems) {
+                    // 查找图片类型
+                    const imageType = item.types.find(type => type.startsWith('image/'));
+                    if (imageType) {
+                        hasImage = true;
+                        const blob = await item.getType(imageType);
+                        const timestamp = Date.now();
+                        const newFile = new File([blob], `paste_${timestamp}_${pastedImages.length + 1}.png`, {
+                            type: imageType
+                        });
+                        pastedImages.push(newFile);
+                        addImageToPreview(newFile);
+                    }
+                }
+
+                if (hasImage) {
+                    updateImageCount();
+                    uploadImages()
+                    showToast(`已粘贴图片，当前共 ${getTotalImageCount()} 张`, 'success');
+                } else {
+                    showToast('剪贴板中没有图片', 'error');
+                }
+            } catch (error) {
+                // 如果 Clipboard API 不支持或权限被拒绝，提示用户
+                if (error.name === 'NotAllowedError') {
+                    showToast('请允许访问剪贴板，或使用 Ctrl+V 粘贴', 'error');
+                } else {
+                    showToast('读取剪贴板失败，请使用 Ctrl+V 粘贴', 'error');
+                }
+                console.error('Clipboard read error:', error);
+            }
+        }
+
+        // 处理键盘 Ctrl+V 粘贴事件
+        function handlePasteEvent(e) {
+            const items = e.clipboardData?.items;
+            if (!items) return;
+
+            let hasImage = false;
+            for (const item of items) {
+                if (item.type.startsWith('image/')) {
+                    hasImage = true;
+                    const file = item.getAsFile();
+                    if (file) {
+                        const timestamp = Date.now();
+                        const newFile = new File([file], `paste_${timestamp}_${pastedImages.length + 1}.png`, {
+                            type: file.type
+                        });
+                        pastedImages.push(newFile);
+                        addImageToPreview(newFile);
+                    }
+                }
+            }
+
+            if (hasImage) {
+                e.preventDefault();
+                updateImageCount();
+                showToast(`已粘贴图片，当前共 ${getTotalImageCount()} 张`, 'success');
+            }
+        }
+
+        // 添加图片到预览区域
+        function addImageToPreview(file) {
+            const preview = document.getElementById('imagePreview');
+            const reader = new FileReader();
+
+            reader.onload = function(e) {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'preview-image-wrapper';
+                wrapper.dataset.filename = file.name;
+                wrapper.innerHTML = `
+                    <img src="${e.target.result}" class="preview-image" alt="预览图片">
+                    <button class="remove-image-btn" onclick="removeImage(this, '${file.name}')" title="删除此图片">×</button>
+                `;
+                preview.appendChild(wrapper);
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // 删除单张图片
+        function removeImage(btn, fileName) {
+            btn.parentElement.remove();
+            pastedImages = pastedImages.filter(f => f.name !== fileName);
+            updateImageCount();
+        }
+
+        // 获取总图片数量
+        function getTotalImageCount() {
+            return pastedImages.length;
+        }
+
+        // 更新图片计数显示
+        function updateImageCount() {
+            const count = getTotalImageCount();
+            const countDiv = document.getElementById('imageCount');
+            const countSpan = document.getElementById('selectedCount');
+
+            if (count > 0) {
+                countDiv.style.display = 'block';
+                countSpan.textContent = count;
+            } else {
+                countDiv.style.display = 'none';
+            }
+        }
+
+        // 获取选择的视觉模型提供商
+        function getVisionProvider() {
+            const selected = document.querySelector('input[name="visionProvider"]:checked');
+            return selected ? selected.value : 'doubao';
+        }
+
+        // 获取图片识别提示词
+        function getVisionPrompt() {
+            return document.getElementById('visionPrompt').value.trim();
+        }
+
+        async function uploadImages() {
+            const totalCount = getTotalImageCount();
+
+            if (totalCount === 0) {
+                showToast('请先粘贴图片', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+
+            for (const file of pastedImages) {
+                formData.append('files', file);
+            }
+
+            formData.append('provider', getVisionProvider());
+            formData.append('prompt', getVisionPrompt());
+
+            showLoading('正在识别图片...');
+            try {
+                const response = await fetch('/api/upload/images', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    document.getElementById('ocrResult').value = data.text;
+                    document.getElementById('ocrResultSection').style.display = 'block';
+                    showToast(`${data.image_count} 张图片识别完成`, 'success');
+                } else {
+                    throw new Error(data.detail);
+                }
+            } catch (error) {
+                showToast('识别失败: ' + error.message, 'error');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        function clearImages() {
+            document.getElementById('imagePreview').innerHTML = '';
+            document.getElementById('ocrResult').value = '';
+            document.getElementById('ocrResultSection').style.display = 'none';
+            pastedImages = [];
+            updateImageCount();
+        }
+
+        // ==================== 获取需求文本 ====================
+        function getRequirementText() {
+            const activeTab = document.querySelector('.tab-content.active').id;
+
+            switch (activeTab) {
+                case 'upload-doc':
+                    return document.getElementById('vectorResultText').value ||
+                           document.getElementById('manualText').value;
+
+                case 'upload-axure':
+                    return document.getElementById('axureContent').value;
+
+                case 'upload-image':
+                    return document.getElementById('ocrResult').value;
+
+                case 'manual-input':
+                    return document.getElementById('manualText').value;
+
+                case 'knowledge-base':
+                    // 从知识库召回的内容 - 使用源码区域的原始 Markdown
+                    const sourceText = document.getElementById('kbRecallSourceText');
+                    return sourceText ? sourceText.value : '';
+
+                default:
+                    return '';
+            }
+        }
+
+        // 获取上下文（全量内容）- 用于增量模式时提供背景信息
+        function getContextText() {
+            const activeTab = document.querySelector('.tab-content.active').id;
+
+            // 只有Axure原型tab需要上下文
+            if (activeTab === 'upload-axure') {
+                const contentMode = document.querySelector('input[name="axureContentMode"]:checked').value;
+                // 如果是增量模式，返回全量内容作为上下文
+                if (contentMode === 'incremental' && axureFullContent) {
+                    return axureFullContent;
+                }
+            }
+            return '';
+        }
+
+        // ==================== 生成测试用例（流式） ====================
+        async function generateTestCases() {
+            const requirementText = getRequirementText();
+            const contextText = getContextText();  // 获取上下文（增量模式时为全量内容）
+            const testModule = document.getElementById('testModule').value.trim();
+
+            // 🆕 保存组合视图的渲染HTML（用于查看提示词预览）
+            const activeTab = document.querySelector('.tab-content.active').id;
+            const renderedRequirementHTML = (activeTab === 'knowledge-base')
+                ? document.getElementById('kbRecallPreviewText').innerHTML
+                : null;
+
+            if (!requirementText) {
+                showToast('请提供需求信息', 'error');
+                return;
+            }
+            if (!testModule) {
+                showToast('模块名称是必填字段', 'error');
+                return;
+            }
+
+            // 创建新的AbortController
+            currentAbortController = new AbortController();
+
+            // 切换按钮显示
+            document.getElementById('generateBtn').classList.add('hidden');
+            document.getElementById('stopBtn').classList.remove('hidden');
+
+            // 显示流式输出区域
+            document.getElementById('systemMessageSection').style.display = 'block';
+            document.getElementById('streamSection').style.display = 'block';
+            document.getElementById('streamOutput').textContent = '';
+            document.getElementById('streamStatus').textContent = '';
+            document.getElementById('testCasesList').innerHTML = '';
+            document.getElementById('downloadSection').style.display = 'none';
+
+            // 清空提示词区域的源码和预览内容
+            document.getElementById('systemMessage').value = '';
+            document.getElementById('promptPreview').innerHTML = '';
+
+            const requestData = {
+                requirement_text: requirementText,
+                context_text: contextText,  // 上下文（全量内容，用于增量模式）
+                test_module: testModule,
+                menu1: document.getElementById('menu1').value,
+                menu2: document.getElementById('menu2').value,
+                test_case_count: parseInt(document.getElementById('testCaseCount').value),
+                prompt: document.getElementById('promptText').value,
+                provider: getSelectedProvider(),
+                source_type: activeTab  // 添加来源类型，用于区分不同面板
+            };
+
+            try {
+                const response = await fetch('/api/testcase/generate/stream', {
+                    signal: currentAbortController.signal,
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestData)
+                });
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let fullContent = '';
+                let buffer = ''; // 添加缓冲区来处理不完整的行
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const text = decoder.decode(value, { stream: true }); // 使用 stream 模式
+                    buffer += text;
+
+                    // 按行分割，但保留最后一个可能不完整的行
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || ''; // 保留最后一个不完整的行
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const data = line.slice(6);
+                            if (data === '[DONE]') continue;
+
+                            try {
+                                const parsed = JSON.parse(data);
+
+                                if (parsed.type === 'system_message') {
+                                    document.getElementById('systemMessage').value = parsed.content;
+
+                                    // 🆕 立即更新预览区域
+                                    const preview = document.getElementById('promptPreview');
+                                    renderMarkdown(parsed.content, preview);
+
+                                    // 🆕 保存原始需求文本和渲染后的HTML（用于预览）
+                                    // 如果是知识库场景（有 requirement_text），保存相关信息
+                                    if (parsed.requirement_text) {
+                                        document.getElementById('systemMessage').dataset.originalRequirement = parsed.requirement_text;
+                                        document.getElementById('systemMessage').dataset.renderedRequirement = renderedRequirementHTML;
+                                    }
+                                } else if (parsed.type === 'chunk') {
+                                    fullContent += parsed.content;
+                                    document.getElementById('streamOutput').textContent = fullContent;
+                                    // 自动滚动到底部
+                                    const output = document.getElementById('streamOutput');
+                                    output.scrollTop = output.scrollHeight;
+                                } else if (parsed.type === 'complete') {
+                                    currentTestCases = parsed.test_cases;
+                                    displayTestCases(currentTestCases);
+                                    document.getElementById('streamStatus').innerHTML =
+                                        `<span class="success">✅ 成功生成 ${currentTestCases.test_cases.length} 个测试用例</span>`;
+                                    document.getElementById('downloadSection').style.display = 'block';
+                                    loadXmindText();
+                                    // 恢复按钮显示
+                                    resetGenerateButtons();
+                                } else if (parsed.type === 'error') {
+                                    document.getElementById('streamStatus').innerHTML =
+                                        `<span class="error">❌ 生成失败: ${parsed.content}</span>`;
+                                }
+                            } catch (e) {
+                                // 解析失败，忽略
+                            }
+                        }
+                    }
+                }
+
+                // 处理缓冲区中剩余的内容
+                if (buffer.trim()) {
+                    const lines = buffer.split('\n');
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const data = line.slice(6);
+                            if (data === '[DONE]') continue;
+
+                            try {
+                                const parsed = JSON.parse(data);
+
+                                if (parsed.type === 'complete') {
+                                    currentTestCases = parsed.test_cases;
+                                    displayTestCases(currentTestCases);
+                                    document.getElementById('streamStatus').innerHTML =
+                                        `<span class="success">✅ 成功生成 ${currentTestCases.test_cases.length} 个测试用例</span>`;
+                                    document.getElementById('downloadSection').style.display = 'block';
+                                    loadXmindText();
+                                    // 恢复按钮显示
+                                    resetGenerateButtons();
+                                }
+                            } catch (e) {
+                                // 解析失败，忽略
+                            }
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('[前端] 请求异常:', error);
+                // 如果是用户主动终止，不显示错误
+                if (error.name === 'AbortError') {
+                    document.getElementById('streamStatus').innerHTML =
+                        `<span class="warning">⏹️ 已终止生成</span>`;
+                } else {
+                    document.getElementById('streamStatus').innerHTML =
+                        `<span class="error">❌ 请求失败: ${error.message}</span>`;
+                }
+                // 恢复按钮显示
+                resetGenerateButtons();
+            }
+        }
+
+        // ==================== 终止生成功能 ====================
+        function stopGeneration() {
+            if (currentAbortController) {
+                currentAbortController.abort();
+                currentAbortController = null;
+            }
+            // 清除已生成的数据
+            clearGeneratedData();
+            // 恢复按钮显示
+            resetGenerateButtons();
+            showToast('已终止生成并清除数据', 'warning');
+        }
+
+        // 清除已生成的数据
+        function clearGeneratedData() {
+            currentTestCases = null;
+            // 清除流式输出区域
+            document.getElementById('streamOutput').textContent = '';
+            document.getElementById('streamStatus').textContent = '';
+            // 隐藏流式输出区域
+            document.getElementById('streamSection').style.display = 'none';
+            // 清除系统提示词
+            document.getElementById('systemMessage').value = '';
+            document.getElementById('systemMessageSection').style.display = 'none';
+            // 清除测试用例列表
+            document.getElementById('testCasesList').innerHTML = '';
+            // 隐藏下载区域
+            document.getElementById('downloadSection').style.display = 'none';
+            // 清空文件名输入框
+            document.getElementById('exportFileName').value = '';
+            // 清空XMind文本
+            document.getElementById('xmindText').value = '';
+        }
+
+        // 恢复生成按钮显示
+        function resetGenerateButtons() {
+            currentAbortController = null;
+            document.getElementById('generateBtn').classList.remove('hidden');
+            document.getElementById('stopBtn').classList.add('hidden');
+        }
+
+        // ==================== 显示测试用例 ====================
+        function displayTestCases(data) {
+            const container = document.getElementById('testCasesList');
+            container.innerHTML = '';
+
+            const menu1 = document.getElementById('menu1').value;
+            const menu2 = document.getElementById('menu2').value;
+
+            for (const testCase of data.test_cases) {
+                const card = document.createElement('div');
+                card.className = 'test-case-card';
+                card.innerHTML = `
+                    <div class="test-case-header" onclick="toggleTestCase(this)">
+                        <span class="test-case-id">${testCase.case_id}</span>
+                        <span class="test-case-title">${testCase.title}</span>
+                        <span class="toggle-icon">▶</span>
+                    </div>
+                    <div class="test-case-body">
+                        <div class="test-case-field">
+                            <strong>模块名称:</strong> ${testCase.test_module}
+                        </div>
+                        ${menu1 ? `<div class="test-case-field"><strong>菜单1:</strong> ${menu1}</div>` : ''}
+                        ${menu2 ? `<div class="test-case-field"><strong>菜单2:</strong> ${menu2}</div>` : ''}
+                        <div class="test-case-field">
+                            <strong>测试步骤:</strong>
+                            <pre>${testCase.steps}</pre>
+                        </div>
+                        <div class="test-case-field">
+                            <strong>预期结果:</strong>
+                            <pre>${testCase.expected_result}</pre>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(card);
+            }
+        }
+
+        function toggleTestCase(header) {
+            const body = header.nextElementSibling;
+            const icon = header.querySelector('.toggle-icon');
+            const isExpanded = body.classList.contains('show');
+
+            if (isExpanded) {
+                body.classList.remove('show');
+                icon.textContent = '▶';
+            } else {
+                body.classList.add('show');
+                icon.textContent = '▼';
+            }
+        }
+
+        // ==================== 导出功能 ====================
+        async function exportCSV() {
+            if (!currentTestCases) {
+                showToast('没有可导出的测试用例', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/export/csv', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        test_cases: currentTestCases,
+                        menu1: document.getElementById('menu1').value,
+                        menu2: document.getElementById('menu2').value
+                    })
+                });
+
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `test_cases_${Date.now()}.csv`;
+                a.click();
+                window.URL.revokeObjectURL(url);
+                showToast('CSV导出成功', 'success');
+            } catch (error) {
+                showToast('导出失败: ' + error.message, 'error');
+            }
+        }
+
+        async function exportMarkdown() {
+            if (!currentTestCases) {
+                showToast('没有可导出的测试用例', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/export/markdown', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        test_cases: currentTestCases,
+                        menu1: document.getElementById('menu1').value,
+                        menu2: document.getElementById('menu2').value
+                    })
+                });
+
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `test_cases_${Date.now()}.md`;
+                a.click();
+                window.URL.revokeObjectURL(url);
+                showToast('Markdown导出成功', 'success');
+            } catch (error) {
+                showToast('导出失败: ' + error.message, 'error');
+            }
+        }
+
+        // 格式化日期时间为年月日时分秒格式
+        function formatDateTimeFilename() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const hour = String(now.getHours()).padStart(2, '0');
+            const minute = String(now.getMinutes()).padStart(2, '0');
+            const second = String(now.getSeconds()).padStart(2, '0');
+            return `${year}${month}${day}${hour}${minute}${second}`;
+        }
+
+        async function exportXmind() {
+            if (!currentTestCases) {
+                showToast('没有可导出的测试用例', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/export/xmind', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        test_cases: currentTestCases,
+                        menu1: document.getElementById('menu1').value,
+                        menu2: document.getElementById('menu2').value
+                    })
+                });
+
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+
+                // 使用用户输入的文件名或默认文件名（年月日时分秒格式）
+                const customFileName = document.getElementById('exportFileName').value.trim();
+                if (customFileName) {
+                    a.download = `${customFileName}.xmind`;
+                } else {
+                    a.download = `test_cases_${formatDateTimeFilename()}.xmind`;
+                }
+
+                a.click();
+                window.URL.revokeObjectURL(url);
+                showToast('XMind导出成功', 'success');
+            } catch (error) {
+                showToast('导出失败: ' + error.message, 'error');
+            }
+        }
+
+        async function loadXmindText() {
+            if (!currentTestCases) return;
+
+            try {
+                const response = await fetch('/api/export/xmind-text', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        test_cases: currentTestCases,
+                        menu1: document.getElementById('menu1').value,
+                        menu2: document.getElementById('menu2').value
+                    })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    document.getElementById('xmindText').value = data.text;
+                }
+            } catch (error) {
+                console.error('加载XMind文本失败:', error);
+            }
+        }
+
+        function copyXmindText() {
+            const text = document.getElementById('xmindText').value;
+            if (!text) {
+                showToast('没有可复制的内容', 'error');
+                return;
+            }
+
+            navigator.clipboard.writeText(text).then(() => {
+                showToast('✓ 已复制到剪贴板', 'success');
+            }).catch(() => {
+                // 降级方案
+                const textarea = document.getElementById('xmindText');
+                textarea.select();
+                document.execCommand('copy');
+                showToast('✓ 已复制到剪贴板', 'success');
+            });
+        }
+
+        // ==================== Markdown 渲染相关 ====================
+
+        // 初始化 Mermaid
+        mermaid.initialize({ startOnLoad: false, theme: 'default' });
+
+        // 初始化 Turndown（HTML to Markdown）
+        const turndownService = new TurndownService({
+            headingStyle: 'atx',
+            codeBlockStyle: 'fenced'
+        });
+        // 使用 GFM 插件支持表格
+        if (typeof turndownPluginGfm !== 'undefined') {
+            turndownService.use(turndownPluginGfm.gfm);
+        }
+
+        // 标记是否正在同步，防止循环触发
+        let isSyncing = false;
+
+        // 重置 Axure 视图为源码模式
+        function resetAxureViewToSource() {
+            const textarea = document.getElementById('axureContent');
+            const preview = document.getElementById('axurePreview');
+            const buttons = document.querySelectorAll('#axureResultCollapsible .view-toggle button');
+
+            // 显示源码，隐藏预览
+            textarea.classList.remove('hidden');
+            preview.classList.add('hidden');
+
+            // 重置按钮状态
+            buttons.forEach(btn => btn.classList.remove('active'));
+            if (buttons[0]) buttons[0].classList.add('active');
+        }
+
+        // 切换 Axure 结果视图（源码/预览）
+        function toggleAxureView(mode) {
+            const textarea = document.getElementById('axureContent');
+            const preview = document.getElementById('axurePreview');
+            const buttons = document.querySelectorAll('#axureResultCollapsible .view-toggle button');
+
+            // 更新按钮状态
+            buttons.forEach(btn => btn.classList.remove('active'));
+
+            if (mode === 'source') {
+                textarea.classList.remove('hidden');
+                preview.classList.add('hidden');
+                buttons[0].classList.add('active');
+                // 切换回源码时重新调整高度
+                setTimeout(() => autoResizeTextarea(textarea), 50);
+            } else if (mode === 'preview') {
+                textarea.classList.add('hidden');
+                preview.classList.remove('hidden');
+                buttons[1].classList.add('active');
+                // 渲染预览
+                renderMarkdown(textarea.value, preview);
+            }
+        }
+
+        // 切换上传需求召回结果视图（源码/预览）
+        function toggleVectorView(mode) {
+            const textarea = document.getElementById('vectorResultText');
+            const preview = document.getElementById('vectorPreview');
+            const buttons = document.querySelectorAll('#vectorQueryResult .view-toggle button');
+
+            // 更新按钮状态
+            buttons.forEach(btn => btn.classList.remove('active'));
+
+            if (mode === 'source') {
+                textarea.classList.remove('hidden');
+                preview.classList.add('hidden');
+                buttons[0].classList.add('active');
+                // 切换回源码时重新调整高度
+                setTimeout(() => autoResizeTextarea(textarea), 50);
+            } else if (mode === 'preview') {
+                textarea.classList.add('hidden');
+                preview.classList.remove('hidden');
+                buttons[1].classList.add('active');
+                // 渲染预览
+                renderMarkdown(textarea.value, preview);
+            }
+        }
+
+        // 重置上传需求召回结果视图为源码模式
+        function resetVectorViewToSource() {
+            const textarea = document.getElementById('vectorResultText');
+            const preview = document.getElementById('vectorPreview');
+            const buttons = document.querySelectorAll('#vectorQueryResult .view-toggle button');
+
+            // 显示源码，隐藏预览
+            textarea.classList.remove('hidden');
+            preview.classList.add('hidden');
+
+            // 重置按钮状态
+            buttons.forEach(btn => btn.classList.remove('active'));
+            if (buttons[0]) buttons[0].classList.add('active');
+        }
+
+        // 监听上传需求预览区编辑，同步回源码
+        document.getElementById('vectorPreview').addEventListener('input', function() {
+            if (isSyncing) return;
+            isSyncing = true;
+            const markdown = turndownService.turndown(this.innerHTML);
+            document.getElementById('vectorResultText').value = markdown;
+            isSyncing = false;
+        });
+
+        // 切换提示词视图（源码/预览）
+        function togglePromptView(mode) {
+            const textarea = document.getElementById('systemMessage');
+            const preview = document.getElementById('promptPreview');
+            const buttons = document.querySelectorAll('#systemMessageSection .view-toggle button');
+
+            // 更新按钮状态
+            buttons.forEach(btn => btn.classList.remove('active'));
+
+            if (mode === 'source') {
+                textarea.classList.remove('hidden');
+                preview.classList.add('hidden');
+                buttons[0].classList.add('active');
+            } else if (mode === 'preview') {
+                textarea.classList.add('hidden');
+                preview.classList.remove('hidden');
+                buttons[1].classList.add('active');
+
+                // 渲染预览
+                renderMarkdown(textarea.value, preview);
+            }
+        }
+
+        // 渲染 Markdown 内容（支持表格和 Mermaid 流程图）
+        async function renderMarkdown(markdown, container) {
+            if (!markdown) {
+                container.innerHTML = '<p style="color:#999;">（无内容）</p>';
+                return;
+            }
+
+            // 使用 marked 渲染基础 Markdown
+            let html = marked.parse(markdown);
+            container.innerHTML = html;
+
+            // 查找并渲染 Mermaid 代码块
+            const codeBlocks = container.querySelectorAll('pre code.language-mermaid, pre code');
+            for (const block of codeBlocks) {
+                const code = block.textContent;
+                // 检测是否是 mermaid 代码
+                if (block.classList.contains('language-mermaid') ||
+                    code.trim().startsWith('flowchart') ||
+                    code.trim().startsWith('graph') ||
+                    code.trim().startsWith('sequenceDiagram') ||
+                    code.trim().startsWith('stateDiagram')) {
+                    try {
+                        const id = 'mermaid-' + Math.random().toString(36).substr(2, 9);
+                        const { svg } = await mermaid.render(id, code);
+                        block.parentElement.outerHTML = `<div class="mermaid-diagram">${svg}</div>`;
+                    } catch (e) {
+                        console.warn('Mermaid 渲染失败:', e);
+                    }
+                }
+            }
+        }
+
+        // 自动调节 textarea 高度（无限制自适应）
+        function autoResizeTextarea(textarea) {
+            // 先重置高度和溢出，确保正确计算 scrollHeight
+            textarea.style.height = 'auto';
+            textarea.style.overflowY = 'scroll';
+            // 获取实际内容高度
+            const newHeight = textarea.scrollHeight;
+            // 设置新高度并隐藏滚动条
+            textarea.style.height = newHeight + 'px';
+            textarea.style.overflowY = 'hidden';
+        }
+
+        // 监听 axureContent 变化，自动调节高度
+        document.getElementById('axureContent').addEventListener('input', function() {
+            autoResizeTextarea(this);
+        });
+
+        // 监听 vectorResultText 变化，自动调节高度
+        document.getElementById('vectorResultText').addEventListener('input', function() {
+            autoResizeTextarea(this);
+        });
+
+        // 监听预览区编辑，同步回源码
+        document.getElementById('axurePreview').addEventListener('input', function() {
+            // 防止循环触发
+            if (isSyncing) return;
+
+            isSyncing = true;
+            // 将 HTML 转换为 Markdown
+            const markdown = turndownService.turndown(this.innerHTML);
+            const textarea = document.getElementById('axureContent');
+            textarea.value = markdown;
+            autoResizeTextarea(textarea);
+            isSyncing = false;
+        });
+
+        // 页面加载时也调整一次高度
+        document.addEventListener('DOMContentLoaded', function() {
+            const textarea = document.getElementById('axureContent');
+            if (textarea && textarea.value) {
+                autoResizeTextarea(textarea);
+            }
+        });
+
+    </script>
+</body>
+</html>

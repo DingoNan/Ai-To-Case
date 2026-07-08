@@ -1,0 +1,49 @@
+# ===========================================
+
+# AI测试用例生成系统 - 依赖包清单
+# ===========================================
+
+# ==================== Web框架 ====================
+fastapi>=0.115.0
+uvicorn>=0.30.0
+pydantic>=2.0.0
+python-multipart>=0.0.9           # FastAPI文件上传支持
+jinja2>=3.1.0                     # FastAPI模板引擎
+aiofiles>=23.0.0                  # 静态文件支持
+
+# ==================== HTTP客户端 ====================
+aiohttp>=3.9.0                    # 异步HTTP请求（调用LLM API）
+certifi>=2024.0.0                 # SSL证书
+requests>=2.31.0                  # 同步HTTP请求
+
+# ==================== 环境配置 ====================
+python-dotenv>=1.0.0              # 环境变量管理
+
+# ==================== 文档解析 ====================
+PyMuPDF>=1.24.0                   # PDF解析 (import fitz)
+python-docx>=1.1.0                # Word文档解析
+beautifulsoup4>=4.12.0            # HTML解析（Axure原型）
+
+# ==================== LLM & 向量数据库 ====================
+# LlamaIndex 核心组件
+llama-index-core>=0.11.0
+llama-index-embeddings-huggingface>=0.3.0
+
+# Chroma 向量数据库
+chromadb>=0.5.0
+
+# 阿里云DashScope（通义千问Embedding）
+dashscope>=1.20.0
+
+# ==================== 数据处理 ====================
+pandas>=2.0.0                     # CSV导出
+numpy>=1.24.0                     # 数值计算
+
+# ==================== XMind导出 ====================
+XMind>=1.2.0                      # XMind文件生成
+
+# ==================== 其他工具 ====================
+dirtyjson>=1.0.8                  # 解析不规范的JSON
+playwright>=1.40.0                # 无头浏览器（用于获取Axure在线链接）
+playwright-stealth>=1.0.6         # playwright反检测插件
+markdownify>=0.11.6               # HTML转Markdown库
