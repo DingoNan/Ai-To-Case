@@ -328,7 +328,6 @@
                         <div class="form-group">
                             <label>选择视觉识别模型</label>
                             <div class="radio-group">
-                                <label><input type="radio" name="visionProvider" value="doubao" > 豆包</label>
                                 <label><input type="radio" name="visionProvider" value="aliyun" checked> 阿里云</label>
                             </div>
                         </div>
@@ -490,9 +489,7 @@
                 <div class="provider-section">
                     <h3>选择大模型通道</h3>
                     <div class="radio-group">
-                        <label><input type="radio" name="provider" value="azure"> Azure</label>
                         <label><input type="radio" name="provider" value="aliyun" checked> 阿里云</label>
-                        <label><input type="radio" name="provider" value="doubao"> 豆包</label>
                         <label><input type="radio" name="provider" value="deepseek"> DeepSeek</label>
                     </div>
                 </div>
@@ -1706,7 +1703,7 @@
         // 获取选择的视觉模型提供商
         function getVisionProvider() {
             const selected = document.querySelector('input[name="visionProvider"]:checked');
-            return selected ? selected.value : 'doubao';
+            return selected ? selected.value : 'aliyun';
         }
 
         // 获取图片识别提示词

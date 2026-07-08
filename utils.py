@@ -1,7 +1,6 @@
 import os
 import json
 from datetime import datetime
-import platform
 from llms import call_llm_api, call_llm_api_stream
 from typing import Dict, Any, List
 import zipfile
@@ -9,24 +8,19 @@ import re
 from io import BytesIO
 import hashlib
 
-if platform.system() == "Windows":
-    # Windows系统路径
-    VECTOR_DB_PATH = r"D:\python\PythonProject\vector_db2"
-    CHROMA_DB_PATH = r"D:\python\PythonProject\chroma_db"
-    EMBEDDING_MODEL = r"D:\python\models\Ceceliachenen\paraphrase-multilingual-MiniLM-L12-v2"
-else:
-    # # Linux/Unix系统路径
-    # VECTOR_DB_PATH = r"//xdd/application/AITestCaseDemo/PythonProject/vector_db"
-    # CHROMA_DB_PATH = r"//xdd/application/AITestCaseDemo/PythonProject/chroma_db"
-    # EMBEDDING_MODEL = r"/xdd/application/AITestCaseDemo/models/Ceceliachenen/paraphrase-multilingual-MiniLM-L12-v2"
-
-    # Linux/Unix系统路径
-    VECTOR_DB_PATH = r"./DB/vector_db"
-    CHROMA_DB_PATH = r"./DB/chroma_db"
-    EMBEDDING_MODEL = r"./AITOCase/models/Ceceliachenen/paraphrase-multilingual-MiniLM-L12-v2"
+# ==================== 路径配置（通过环境变量覆盖，默认使用相对路径）====================
+VECTOR_DB_PATH = os.getenv("VECTOR_DB_PATH", "./DB/vector_db")
+CHROMA_DB_PATH = os.getenv("CHROMA_DB_PATH", "./DB/chroma_db")
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "./models/Ceceliachenen/paraphrase-multilingual-MiniLM-L12-v2")
 
 # 通义千问Embedding配置
 DASHSCOPE_EMBEDDING_MODEL = "text-embedding-v3"  # 通义文本嵌入模型111
+
+# OCR 并发控制（熔断机制）
+import asyncio
+OCR_SEMAPHORE = asyncio.Semaphore(int(os.getenv("OCR_MAX_CONCURRENT", "5")))
+OCR_TIMEOUT = int(os.getenv("OCR_TIMEOUT", "60"))  # 单张图片超时（秒）
+OCR_MAX_RETRIES = int(os.getenv("OCR_MAX_RETRIES", "2"))  # 失败重试次数
 
 def get_current_datetime():
     now = datetime.now()
@@ -829,13 +823,14 @@ def query_vector_db_and_call_api(persist_dir, prompt):
 #         return []
 # 换行处理函数
 # 换行处理函数
-async def ocr_image_async(uploaded_files, vision_provider: str = "doubao", custom_prompt: str = None):
+async def ocr_image_async(uploaded_files, vision_provider: str = "aliyun", custom_prompt: str = None):
     """
     使用视觉大模型识别图片内容，支持多张图片并发处理（异步版本）
+    内置熔断机制：并发限制 / 超时控制 / 失败重试
 
     Args:
         uploaded_files: 单个图片字节或图片字节列表
-        vision_provider: 视觉模型提供商，"doubao" 或 "aliyun"
+        vision_provider: 视觉模型提供商，"aliyun" 或 "deepseek"（默认 aliyun）
         custom_prompt: 自定义识别提示词，为空则使用默认提示词
 
     Returns:
@@ -880,25 +875,40 @@ async def ocr_image_async(uploaded_files, vision_provider: str = "doubao", custo
 5. 保持原文的语言（中文/英文等），不要翻译"""
 
     async def process_single_image(idx: int, file_bytes: bytes):
-        """处理单张图片"""
-        try:
-            image_base64 = base64.b64encode(file_bytes).decode('utf-8')
-            result = await call_vision_api(image_base64, prompt, provider=vision_provider)
+        """处理单张图片（带熔断：信号量+超时+重试）"""
+        async with OCR_SEMAPHORE:
+            for attempt in range(OCR_MAX_RETRIES + 1):
+                try:
+                    image_base64 = base64.b64encode(file_bytes).decode('utf-8')
+                    result = await asyncio.wait_for(
+                        call_vision_api(image_base64, prompt, provider=vision_provider),
+                        timeout=OCR_TIMEOUT
+                    )
 
-            if "error" in result:
-                return idx, f"图片 {idx + 1}: 识别失败: {result['error']}"
+                    if "error" in result:
+                        if attempt < OCR_MAX_RETRIES:
+                            print(f"[OCR] 图片 {idx+1} 第{attempt+1}次失败: {result['error']}，正在重试...")
+                            continue
+                        return idx, f"图片 {idx + 1}: 识别失败: {result['error']}"
 
-            choices = result.get("choices", [])
-            if choices:
-                content = choices[0].get("message", {}).get("content", "")
-                if content:
-                    return idx, content
-            return idx, f"图片 {idx + 1}: 未识别到文字"
-        except Exception as e:
-            return idx, f"图片 {idx + 1}: 识别处理失败: {str(e)}"
+                    choices = result.get("choices", [])
+                    if choices:
+                        content = choices[0].get("message", {}).get("content", "")
+                        if content:
+                            return idx, content
+                    return idx, f"图片 {idx + 1}: 未识别到文字"
+                except asyncio.TimeoutError:
+                    if attempt < OCR_MAX_RETRIES:
+                        print(f"[OCR] 图片 {idx+1} 第{attempt+1}次超时，正在重试...")
+                        continue
+                    return idx, f"图片 {idx + 1}: 识别超时"
+                except Exception as e:
+                    if attempt < OCR_MAX_RETRIES:
+                        print(f"[OCR] 图片 {idx+1} 第{attempt+1}次异常: {e}，正在重试...")
+                        continue
+                    return idx, f"图片 {idx + 1}: 识别处理失败: {str(e)}"
 
-    # 并发处理所有图片
-    import asyncio
+    # 并发处理所有图片（信号量控制并发数）
     tasks = [process_single_image(idx, fb) for idx, fb in enumerate(input_list)]
     results = await asyncio.gather(*tasks)
     # 按原始顺序排序

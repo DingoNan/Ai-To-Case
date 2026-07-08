@@ -1320,13 +1320,14 @@ async def generate_testcase_stream(request: GenerateRequest, http_request: Reque
     )
 
     async def event_generator():
-        """SSE事件生成器"""
+        """SSE事件生成器（带错误恢复：异常时返回已生成的partial content）"""
         total_tokens = 0
         prompt_tokens = 0
         completion_tokens = 0
         model_name = ""
         status = "success"
         error_message = ""
+        partial_content = ""  # 累积已生成的内容，用于错误恢复
         
         try:
             # 先发送系统提示词
@@ -1342,6 +1343,7 @@ async def generate_testcase_stream(request: GenerateRequest, http_request: Reque
                 prompt=prompt
             ):
                 if result["type"] == "chunk":
+                    partial_content += result["content"]
                     yield f"data: {json.dumps({'type': 'chunk', 'content': result['content']}, ensure_ascii=False)}\n\n"
                 elif result["type"] == "complete":
                     yield f"data: {json.dumps({'type': 'complete', 'test_cases': result['test_cases']}, ensure_ascii=False)}\n\n"
@@ -1353,13 +1355,33 @@ async def generate_testcase_stream(request: GenerateRequest, http_request: Reque
                         total_tokens = token_usage.get("total_tokens", 0)
                         model_name = token_usage.get("model", "")
                 elif result["type"] == "error":
-                    yield f"data: {json.dumps({'type': 'error', 'content': result['content']}, ensure_ascii=False)}\n\n"
+                    # 错误时发送已生成的partial content帮助恢复
+                    error_data = {
+                        'type': 'error',
+                        'content': result['content'],
+                        'partial_content': partial_content if partial_content else None
+                    }
+                    yield f"data: {json.dumps(error_data, ensure_ascii=False)}\n\n"
                     status = "error"
                     error_message = result.get('content', '')
 
             yield "data: [DONE]\n\n"
+        except (asyncio.CancelledError, ConnectionResetError, BrokenPipeError) as e:
+            # 客户端断开连接 — 静默处理，不yield（此时yield会触发另一异常）
+            status = "error"
+            error_message = f"客户端连接断开: {str(e)}"
+            return
         except Exception as e:
-            yield f"data: {json.dumps({'type': 'error', 'content': str(e)}, ensure_ascii=False)}\n\n"
+            # 发送错误时带上已生成的partial_content
+            error_data = {
+                'type': 'error',
+                'content': str(e),
+                'partial_content': partial_content if partial_content else None
+            }
+            try:
+                yield f"data: {json.dumps(error_data, ensure_ascii=False)}\n\n"
+            except Exception:
+                pass  # 客户端已断开，忽略
             status = "error"
             error_message = str(e)
         finally:

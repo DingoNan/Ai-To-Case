@@ -16,10 +16,10 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # 复制依赖文件
-COPY requirements-new.txt .
+COPY requirements.txt .
 
 # 安装Python依赖（使用阿里云镜像）
-RUN pip install --no-cache-dir -r requirements-new.txt -i https://mirrors.aliyun.com/pypi/simple
+RUN pip install --no-cache-dir -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple
 
 # 复制项目文件（排除不需要的文件）
 COPY main.py .
