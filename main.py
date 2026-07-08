@@ -63,10 +63,12 @@ app = FastAPI(
     version="2.0.0"
 )
 
-# 添加 CORS 中间件
+# 添加 CORS 中间件（生产环境建议通过 CORS_ORIGINS 环境变量限制）
+import os as _os
+_allowed_origins = _os.getenv("CORS_ORIGINS", "*").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins if _allowed_origins != ["*"] else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

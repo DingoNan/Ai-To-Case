@@ -18,7 +18,14 @@ DASHSCOPE_EMBEDDING_MODEL = "text-embedding-v3"  # 通义文本嵌入模型111
 
 # OCR 并发控制（熔断机制）
 import asyncio
-OCR_SEMAPHORE = asyncio.Semaphore(int(os.getenv("OCR_MAX_CONCURRENT", "5")))
+_OCR_SEMAPHORE = None
+
+def _get_ocr_semaphore():
+    global _OCR_SEMAPHORE
+    if _OCR_SEMAPHORE is None:
+        _OCR_SEMAPHORE = asyncio.Semaphore(int(os.getenv("OCR_MAX_CONCURRENT", "5")))
+    return _OCR_SEMAPHORE
+
 OCR_TIMEOUT = int(os.getenv("OCR_TIMEOUT", "60"))  # 单张图片超时（秒）
 OCR_MAX_RETRIES = int(os.getenv("OCR_MAX_RETRIES", "2"))  # 失败重试次数
 
@@ -876,7 +883,7 @@ async def ocr_image_async(uploaded_files, vision_provider: str = "aliyun", custo
 
     async def process_single_image(idx: int, file_bytes: bytes):
         """处理单张图片（带熔断：信号量+超时+重试）"""
-        async with OCR_SEMAPHORE:
+        async with _get_ocr_semaphore():
             for attempt in range(OCR_MAX_RETRIES + 1):
                 try:
                     image_base64 = base64.b64encode(file_bytes).decode('utf-8')

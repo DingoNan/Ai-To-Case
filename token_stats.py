@@ -11,6 +11,28 @@ from typing import Dict, List, Optional
 from collections import defaultdict
 
 
+def _safe_fromisoformat(ts: str) -> datetime:
+    """兼容 Python 3.10/3.11 的 ISO 时间解析（去掉时区后缀）"""
+    if not ts:
+        return datetime.min
+    # 去掉 'Z' 后缀（Python 3.11 不支持）
+    if ts.endswith('Z'):
+        ts = ts[:-1] + '+00:00'
+    # 处理 '+00:00' 等时区信息——3.11 直接解析会抛异常
+    try:
+        return datetime.fromisoformat(ts)
+    except (ValueError, TypeError):
+        # 去掉时区部分
+        if '+' in ts:
+            ts = ts.split('+')[0]
+        elif 'Z' in ts:
+            ts = ts.replace('Z', '')
+        try:
+            return datetime.fromisoformat(ts)
+        except (ValueError, TypeError):
+            return datetime.min
+
+
 class TokenStatsManager:
     """Token 和 IP 统计管理器"""
     
@@ -96,7 +118,7 @@ class TokenStatsManager:
         filtered_records = []
         for record in self.stats["records"]:
             try:
-                record_time = datetime.fromisoformat(record["timestamp"]).timestamp()
+                record_time = _safe_fromisoformat(record["timestamp"]).timestamp()
                 if record_time >= cutoff_time:
                     filtered_records.append(record)
             except:
@@ -210,7 +232,7 @@ class TokenStatsManager:
         recent_records = []
         for record in self.stats["records"]:
             try:
-                record_time = datetime.fromisoformat(record["timestamp"]).timestamp()
+                record_time = _safe_fromisoformat(record["timestamp"]).timestamp()
                 if record_time >= cutoff_time:
                     recent_records.append(record)
             except:
@@ -233,7 +255,7 @@ class TokenStatsManager:
         original_count = len(self.stats["records"])
         self.stats["records"] = [
             record for record in self.stats["records"]
-            if datetime.fromisoformat(record["timestamp"]).timestamp() >= cutoff_time
+            if _safe_fromisoformat(record["timestamp"]).timestamp() >= cutoff_time
         ]
         
         removed_count = original_count - len(self.stats["records"])

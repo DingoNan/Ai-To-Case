@@ -3,8 +3,6 @@ import re
 import os
 from collections import defaultdict
 
-import re
-
 
 def test_cases_to_xmind(test_cases_data: dict, xmind_path: str, root_title: str = "测试用例", menu1: str = "", menu2: str = ""):
     """
