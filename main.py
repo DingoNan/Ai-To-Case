@@ -513,7 +513,8 @@ async def fetch_axure_url(request: AxureUrlRequest):
 async def upload_images(
     files: List[UploadFile] = File(...),
     provider: str = Form("aliyun"),
-    prompt: str = Form("")
+    prompt: str = Form(""),
+    http_request: Request = None
 ):
     """
     上传图片进行OCR识别
@@ -521,21 +522,55 @@ async def upload_images(
     provider: "aliyun" (默认) | "deepseek"
     prompt: 自定义识别提示词
     """
+    client_ip = get_client_ip(http_request) if http_request else "127.0.0.1"
     try:
         all_bytes = []
         for f in files:
             content = await f.read()
             all_bytes.append(content)
 
-        # 调用视觉模型OCR（异步版本）
-        result = await ocr_image_async(uploaded_files=all_bytes, vision_provider=provider, custom_prompt=prompt if prompt else None)
+        # 调用视觉模型OCR（异步版本），返回 (文本, token用量)
+        result_text, token_usage = await ocr_image_async(
+            uploaded_files=all_bytes, vision_provider=provider,
+            custom_prompt=prompt if prompt else None
+        )
+
+        # 记录 Token 统计
+        try:
+            token_stats_manager.record_usage(
+                ip=client_ip,
+                endpoint="/api/upload/images",
+                provider=provider,
+                prompt_tokens=token_usage.get("prompt_tokens", 0),
+                completion_tokens=token_usage.get("completion_tokens", 0),
+                total_tokens=token_usage.get("total_tokens", 0),
+                model=token_usage.get("model", provider),
+                status="success"
+            )
+        except Exception as e:
+            print(f"[TokenStats] 记录统计失败: {e}")
 
         return {
             "success": True,
-            "text": result,
+            "text": result_text,
             "image_count": len(files)
         }
     except Exception as e:
+        # 记录错误
+        try:
+            token_stats_manager.record_usage(
+                ip=client_ip,
+                endpoint="/api/upload/images",
+                provider=provider,
+                prompt_tokens=0,
+                completion_tokens=0,
+                total_tokens=0,
+                model=provider,
+                status="error",
+                error_message=str(e)
+            )
+        except Exception as stat_e:
+            print(f"[TokenStats] 记录统计失败: {stat_e}")
         raise HTTPException(status_code=500, detail=f"图片识别失败: {str(e)}")
 
 

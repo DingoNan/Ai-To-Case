@@ -6,12 +6,12 @@
 
 ### 核心功能
 - **多格式文档解析** - 支持 PDF、Word（.docx）、Markdown、TXT 文件上传和解析
-- **Axure 原型解析** - 支持 Axure 导出的 ZIP 包和 HTML 文件解析，自动提取需求信息
+- ~~**Axure 原型解析** - 支持 Axure 导出的 ZIP 包和 HTML 文件解析，自动提取需求信息~~（暂时隐藏）
 - **图片 OCR 识别** - 支持多张图片的并发 OCR 识别（阿里云 Qwen-VL，含熔断机制）
 - **AI 测试用例生成** - 基于需求描述自动生成结构化的测试用例 JSON
 - **流式实时生成** - 支持 SSE 流式传输，实时显示生成过程（含错误恢复）
 - **多格式导出** - 支持导出为 CSV、Markdown、XMind 格式
-- **使用统计** - 自动记录每个 IP 的访问情况和 Token 消耗，支持可视化查看
+- **使用统计** - 自动记录每次 API 调用的 IP、模型、Token 消耗，支持按 IP/模型/提供商等维度可视化查看
 
 ### 向量化检索
 - **LlamaIndex 向量库** - 基于 HuggingFace Embedding 的本地向量化存储
@@ -30,7 +30,20 @@
 AiToCase_v2/
 ├── main.py                 # FastAPI 主程序入口
 ├── llms.py                 # LLM API 调用层（DeepSeek + 阿里云）
-├── utils.py                # 工具函数（文档解析、向量库、OCR）
+├── utils/                  # 工具函数包
+│   ├── __init__.py         # 重新导出所有公共符号（保持向后兼容）
+│   ├── config.py           # 路径常量、OCR 配置
+│   ├── helpers.py          # get_current_datetime
+│   ├── text.py             # JSON修复 + 提示词构建
+│   ├── streaming.py        # 流式测试用例生成
+│   ├── ocr.py              # OCR识别（含熔断机制）
+│   ├── document.py         # 文档解析（PDF/Word/Markdown）
+│   ├── vector.py           # LlamaIndex 向量库
+│   ├── chroma.py           # Chroma 向量库 + DashScope Embedding
+│   ├── llm_helper.py       # AI 需求精炼
+│   ├── flowchart.py        # 流程图检测与 Mermaid 转换
+│   ├── axure.py            # Axure 原型解析（ZIP/HTML/在线）
+│   └── knowledge_base.py   # 知识库管理 + 智能召回
 ├── utils_enhanced_kb.py    # 增强型知识库工具
 ├── utils_sitemap_kb.py     # 网站地图知识库工具
 ├── md_to_xmind_utils.py    # Markdown 转 XMind 工具
@@ -205,6 +218,15 @@ uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 - **Token 消耗** - prompt_tokens、completion_tokens、total_tokens
 - **调用信息** - 端点、模型、提供商、时间戳、状态
 
+### 统计维度
+当前支持以下维度的统计展示：
+- **总体概览** - 总调用次数、成功/失败、总 Token 消耗、独立 IP 数、模型数
+- **模型提供商分布** - 各提供商（DeepSeek/阿里云）的调用次数与占比
+- **模型用量分布** - 每个模型（deepseek-chat/qwen-plus/qwen-vl-plus 等）的调用次数、成功/失败、输入/输出 Token 和 Token 占比
+- **API 端点分布** - 各端点的调用次数与占比
+- **IP 统计** - 每个 IP 的调用次数和 Token 消耗排行
+- **详细记录** - 最近调用记录，支持时间范围筛选
+
 ### 数据存储
 统计数据存储在 `token_stats.json` 文件中，格式如下：
 ```json
@@ -227,7 +249,8 @@ uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 
 ### 可视化查看
 访问 `http://localhost:8001/stats` 即可查看：
-- **总体概览** - 总调用次数、总 Token 消耗、独立 IP 数
+- **总体概览** - 总调用次数、总 Token 消耗、独立 IP 数、各模型用量分布
+- **模型用量** - 每个模型的调用次数、Token 消耗及占比
 - **IP 统计** - 每个 IP 的调用次数和 Token 消耗排行
 - **详细记录** - 最近 100 条调用记录，支持时间范围筛选
 

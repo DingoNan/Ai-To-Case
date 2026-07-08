@@ -198,7 +198,7 @@
                 <div class="tab-container">
                     <div class="tab-buttons">
                         <button class="tab-btn active" data-tab="upload-doc">上传需求</button>
-                        <button class="tab-btn" data-tab="upload-axure">上传Axure原型</button>
+                        <!--?                        <button class="tab-btn" data-tab="upload-axure">上传Axure原型</button>-->
                         <button class="tab-btn" data-tab="upload-image">上传图片</button>
                         <button class="tab-btn" data-tab="manual-input">手动输入需求</button>
 <!--?                        <button class="tab-btn" data-tab="knowledge-base">知识库管理</button>-->
@@ -270,14 +270,12 @@
                         </div>
                     </div>
 
-                    <!-- 上传Axure原型 -->
-                    <div class="tab-content" id="upload-axure">
-                        <!-- 文件上传（ZIP/HTML） -->
+                    <!-- 上传Axure原型（已隐藏） -->
+                    <div class="tab-content" id="upload-axure" style="display:none;">
                         <div id="axureFileInput" class="form-group">
                             <label>上传Axure原型包 (ZIP/HTML)</label>
                             <input type="file" id="axureFile" accept=".zip,.html,.htm">
                         </div>
-
                         <div class="axure-controls">
                             <label class="radio-inline">
                                 <input type="radio" name="axureContentMode" value="full" checked>
@@ -291,14 +289,13 @@
                                 <input type="checkbox" id="axureAiRefine" checked>
                                 <span>AI结构化</span>
                             </label>
-<!--?                            <label class="checkbox-inline">-->
-<!--?                                <input type="checkbox" id="axureRecursive">-->
-<!--?                                <span>递归解析链接</span>-->
-<!--?                            </label>-->
+                            <label class="checkbox-inline">
+                                <input type="checkbox" id="axureRecursive">
+                                <span>递归解析链接</span>
+                            </label>
                             <div class="flex-spacer"></div>
                             <button class="btn btn-secondary" onclick="fetchAxure()">获取Axure</button>
                         </div>
-                        <!-- 局部加载动画 -->
                         <div id="axureLocalLoading" class="inline-loading">
                             <div class="local-loading-spinner"></div>
                             <div class="local-loading-text">正在获取Axure内容...</div>
@@ -365,6 +362,10 @@
                         <div class="form-group">
                             <label>请输入需求描述</label>
                             <textarea id="manualText" rows="10" placeholder="在此输入需求描述..."></textarea>
+                            <div class="action-buttons-row" style="margin-top: 8px;">
+                                <button class="btn btn-primary" onclick="pasteImageToManual()">📋 粘贴图片并识别</button>
+                                <span style="font-size: 12px; color: #888; margin-left: 8px;">也可直接 Ctrl+V 粘贴图片自动识别</span>
+                            </div>
                         </div>
                     </div>
 
@@ -1584,6 +1585,8 @@
                 const activeTab = document.querySelector('.tab-content.active').id;
                 if (activeTab === 'upload-image') {
                     handlePasteEvent(e);
+                } else if (activeTab === 'manual-input') {
+                    handlePasteToManual(e);
                 }
             });
         }
@@ -1625,6 +1628,87 @@
                     showToast('读取剪贴板失败，请使用 Ctrl+V 粘贴', 'error');
                 }
                 console.error('Clipboard read error:', error);
+            }
+        }
+
+        // 从剪贴板读取图片并识别后追加到手动输入文本框
+        async function pasteImageToManual() {
+            try {
+                const clipboardItems = await navigator.clipboard.read();
+                let hasImage = false;
+
+                for (const item of clipboardItems) {
+                    const imageType = item.types.find(type => type.startsWith('image/'));
+                    if (imageType) {
+                        hasImage = true;
+                        const blob = await item.getType(imageType);
+                        const file = new File([blob], `paste_${Date.now()}.png`, { type: imageType });
+                        await recognizeImageToManual(file);
+                    }
+                }
+
+                if (!hasImage) {
+                    showToast('剪贴板中没有图片', 'error');
+                }
+            } catch (error) {
+                if (error.name === 'NotAllowedError') {
+                    showToast('请允许访问剪贴板，或使用 Ctrl+V 粘贴', 'error');
+                } else {
+                    showToast('读取剪贴板失败：' + error.message, 'error');
+                }
+            }
+        }
+
+        // 将单张图片发送到 OCR 识别，结果追加到 manualText
+        async function recognizeImageToManual(file) {
+            showLoading('正在识别图片...');
+            try {
+                const formData = new FormData();
+                formData.append('files', file);
+                formData.append('provider', getVisionProvider());
+                formData.append('prompt', getVisionPrompt());
+
+                const response = await fetch('/api/upload/images', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    const ta = document.getElementById('manualText');
+                    const prefix = ta.value.trim() ? '\n\n--- 图片识别结果 ---\n\n' : '';
+                    ta.value += prefix + data.text;
+                    ta.scrollTop = ta.scrollHeight;
+                    showToast('图片识别完成，结果已追加到需求描述', 'success');
+                } else {
+                    throw new Error(data.detail || '识别失败');
+                }
+            } catch (error) {
+                showToast('图片识别失败: ' + error.message, 'error');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // 处理 manual-input tab 下的 Ctrl+V 粘贴事件
+        function handlePasteToManual(e) {
+            const items = e.clipboardData?.items;
+            if (!items) return;
+
+            let hasImage = false;
+            for (const item of items) {
+                if (item.type.startsWith('image/')) {
+                    hasImage = true;
+                    e.preventDefault();
+                    const file = item.getAsFile();
+                    if (file) {
+                        recognizeImageToManual(file);
+                    }
+                }
+            }
+
+            if (hasImage) {
+                showToast('正在识别粘贴的图片...', 'info');
             }
         }
 

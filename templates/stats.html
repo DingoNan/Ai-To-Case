@@ -106,6 +106,10 @@
             background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
         }
         
+        .card:nth-child(6) {
+            background: linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%);
+        }
+        
         table {
             width: 100%;
             border-collapse: collapse;
@@ -277,6 +281,10 @@
                                 <h3>唯一 IP 数</h3>
                                 <div class="value">${summary.unique_ips}</div>
                             </div>
+                            <div class="card">
+                                <h3>模型数</h3>
+                                <div class="value">${Object.keys(summary.models).length}</div>
+                            </div>
                         </div>
                         
                         <h2>模型提供商分布</h2>
@@ -291,6 +299,30 @@
                                     <td><span class="provider-badge provider-${provider}">${provider}</span></td>
                                     <td>${count.toLocaleString()}</td>
                                     <td>${((count / summary.total_requests) * 100).toFixed(1)}%</td>
+                                </tr>
+                            `).join('')}
+                        </table>
+                        
+                        <h2 style="margin-top: 30px;">模型用量分布</h2>
+                        <table>
+                            <tr>
+                                <th>模型</th>
+                                <th>调用次数</th>
+                                <th>成功/失败</th>
+                                <th>总 Token</th>
+                                <th>输入 Token</th>
+                                <th>输出 Token</th>
+                                <th>Token 占比</th>
+                            </tr>
+                            ${Object.entries(summary.models).sort((a, b) => b[1].total_tokens - a[1].total_tokens).map(([model, ms]) => `
+                                <tr>
+                                    <td><strong>${model}</strong></td>
+                                    <td>${ms.calls.toLocaleString()}</td>
+                                    <td><span class="status-success">${ms.success.toLocaleString()}</span> / <span class="status-error">${ms.error.toLocaleString()}</span></td>
+                                    <td><strong>${ms.total_tokens.toLocaleString()}</strong></td>
+                                    <td>${ms.prompt_tokens.toLocaleString()}</td>
+                                    <td>${ms.completion_tokens.toLocaleString()}</td>
+                                    <td>${summary.total_tokens > 0 ? ((ms.total_tokens / summary.total_tokens) * 100).toFixed(1) + '%' : '-'}</td>
                                 </tr>
                             `).join('')}
                         </table>

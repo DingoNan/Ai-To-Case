@@ -134,6 +134,7 @@ class TokenStatsManager:
             "completion_tokens": 0,
             "providers": defaultdict(int),
             "endpoints": defaultdict(int),
+            "models": {},
             "first_seen": None,
             "last_seen": None
         })
@@ -158,6 +159,28 @@ class TokenStatsManager:
             
             stats["providers"][record.get("provider", "unknown")] += 1
             stats["endpoints"][record.get("endpoint", "unknown")] += 1
+            
+            # 按模型统计
+            model_name = record.get("model", "") or ""
+            if not model_name:
+                model_name = "（未指定）"
+            if model_name not in stats["models"]:
+                stats["models"][model_name] = {
+                    "calls": 0,
+                    "success": 0,
+                    "error": 0,
+                    "total_tokens": 0,
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0
+                }
+            stats["models"][model_name]["calls"] += 1
+            if record["status"] == "success":
+                stats["models"][model_name]["success"] += 1
+            else:
+                stats["models"][model_name]["error"] += 1
+            stats["models"][model_name]["total_tokens"] += record.get("total_tokens", 0)
+            stats["models"][model_name]["prompt_tokens"] += record.get("prompt_tokens", 0)
+            stats["models"][model_name]["completion_tokens"] += record.get("completion_tokens", 0)
             
             timestamp = record.get("timestamp")
             if timestamp:
@@ -190,7 +213,8 @@ class TokenStatsManager:
             "completion_tokens": 0,
             "unique_ips": len(ip_stats),
             "providers": defaultdict(int),
-            "endpoints": defaultdict(int)
+            "endpoints": defaultdict(int),
+            "models": {}
         }
         
         for ip, stats in ip_stats.items():
@@ -206,10 +230,29 @@ class TokenStatsManager:
             
             for endpoint, count in stats["endpoints"].items():
                 total_stats["endpoints"][endpoint] += count
+            
+            # 按模型汇总
+            for model_name, model_stat in stats["models"].items():
+                if model_name not in total_stats["models"]:
+                    total_stats["models"][model_name] = {
+                        "calls": 0,
+                        "success": 0,
+                        "error": 0,
+                        "total_tokens": 0,
+                        "prompt_tokens": 0,
+                        "completion_tokens": 0
+                    }
+                total_stats["models"][model_name]["calls"] += model_stat["calls"]
+                total_stats["models"][model_name]["success"] += model_stat["success"]
+                total_stats["models"][model_name]["error"] += model_stat["error"]
+                total_stats["models"][model_name]["total_tokens"] += model_stat["total_tokens"]
+                total_stats["models"][model_name]["prompt_tokens"] += model_stat["prompt_tokens"]
+                total_stats["models"][model_name]["completion_tokens"] += model_stat["completion_tokens"]
         
         # 转换 defaultdict 为普通 dict
         total_stats["providers"] = dict(total_stats["providers"])
         total_stats["endpoints"] = dict(total_stats["endpoints"])
+        total_stats["models"] = dict(total_stats["models"])
         
         return {
             "summary": total_stats,

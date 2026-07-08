@@ -116,20 +116,23 @@ async def _call_openai_compatible_api_stream(
                     yield {"error": f"API调用失败: {response.status}", "details": error_text}
                     return
 
-                # 逐行读取 SSE 流
-                async for line in response.content:
-                    line = line.decode('utf-8').strip()
+                # 逐行读取 SSE 流（使用 readline 确保按行分割）
+                while True:
+                    line_bytes = await response.content.readline()
+                    if not line_bytes:
+                        break
+                    line = line_bytes.decode('utf-8').strip()
                     if not line:
                         continue
                     if line.startswith("data: "):
                         data = line[6:]  # 去掉 "data: " 前缀
                         if data == "[DONE]":
-                            break
+                            continue  # 有些API在[DONE]后还有usage信息
                         try:
                             chunk = json_lib.loads(data)
                             choices = chunk.get("choices", [])
                             # 提取usage信息（部分API会在流中返回）
-                            if "usage" in chunk:
+                            if "usage" in chunk and chunk["usage"] is not None:
                                 token_usage = {
                                     "prompt_tokens": chunk["usage"].get("prompt_tokens", 0),
                                     "completion_tokens": chunk["usage"].get("completion_tokens", 0),
@@ -138,13 +141,17 @@ async def _call_openai_compatible_api_stream(
                                 }
                             if not choices:
                                 continue
-                            delta = choices[0].get("delta", {})
+                            # 防止 choices[0] 为 None 导致 AttributeError
+                            first_choice = choices[0]
+                            if first_choice is None:
+                                continue
+                            delta = first_choice.get("delta", {})
                             content = delta.get("content", "")
                             if content:
                                 yield content
                         except json_lib.JSONDecodeError:
                             continue
-                        except (IndexError, KeyError, TypeError):
+                        except (IndexError, KeyError, TypeError, AttributeError):
                             continue
 
                 # 最后yield token_usage信息（如果API不支持流式usage，用空字典）
@@ -280,7 +287,15 @@ async def _call_aliyun_vision_api(image_base64: str, prompt: str):
         ) as session:
             async with session.post(url, headers=headers, json=payload, timeout=timeout) as response:
                 if response.status == 200:
-                    return await response.json()
+                    result = await response.json()
+                    usage = result.get("usage", {})
+                    result["_token_usage"] = {
+                        "prompt_tokens": usage.get("prompt_tokens", 0),
+                        "completion_tokens": usage.get("completion_tokens", 0),
+                        "total_tokens": usage.get("total_tokens", 0),
+                        "model": "qwen-vl-plus"
+                    }
+                    return result
                 error_text = await response.text()
                 return {"error": f"API调用失败: {response.status}", "details": error_text}
     except Exception as e:
