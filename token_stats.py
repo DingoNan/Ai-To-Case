@@ -55,7 +55,7 @@ class TokenStatsManager:
         Args:
             ip: 客户端 IP 地址
             endpoint: API 端点
-            provider: 模型提供商 (deepseek, azure, aliyun, doubao)
+            provider: 模型提供商 (deepseek, aliyun)
             prompt_tokens: 输入 token 数
             completion_tokens: 输出 token 数
             total_tokens: 总 token 数

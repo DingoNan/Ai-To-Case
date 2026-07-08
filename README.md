@@ -37,7 +37,8 @@ AiToCase_v2/
 ├── token_stats.py          # Token 和 IP 统计模块
 ├── prompts.json            # 提示词配置文件
 ├── requirements.txt        # Python 依赖包
-├── .env                    # 环境变量配置
+├── .env.example            # 环境变量模板（复制为 .env 并填入密钥）
+├── .env                    # 环境变量配置（已 gitignore，不提交）
 ├── Dockerfile              # Docker 部署配置
 ├── scripts/                # 部署脚本
 │   └── deploy_fix.sh
@@ -70,12 +71,12 @@ conda activate AITest
 pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
 
 # 4. 配置环境变量
-# 复制 .env 中的示例值，填入自己的 API 密钥
+# 复制 .env.example 为 .env 并填入自己的 API 密钥
 ```
 
 ### 环境变量配置
 
-在项目根目录的 `.env` 文件中配置 API 密钥：
+复制 `.env.example` 为 `.env`，然后在 `.env` 中配置 API 密钥：
 
 ```env
 # DeepSeek 配置
@@ -102,10 +103,10 @@ OCR_MAX_RETRIES=2
 python main.py
 
 # 方式2：使用 uvicorn（支持热重载）
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 ```
 
-访问 http://localhost:8000 即可使用 Web 界面。
+访问 http://localhost:8001 即可使用 Web 界面。
 
 ## API 接口
 
@@ -242,7 +243,7 @@ docker build -t aitocase:2.3 .
 
 ```bash
 # 基础运行（开发测试）
-docker run -d -p 8000:8000 --name aitocase-dev aitocase:2.3
+docker run -d -p 8001:8001 --name aitocase-dev aitocase:2.3
 
 # 生产环境运行
 docker run -d \
@@ -266,7 +267,7 @@ docker ps -a | grep aitocase
 docker logs -f AiToCase-Prod
 
 # 访问API文档
-curl http://localhost:8000/docs
+curl http://localhost:8001/docs
 ```
 
 ## 注意事项

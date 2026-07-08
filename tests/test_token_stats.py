@@ -113,7 +113,7 @@ def test_generate_with_stats():
                 "requirement_text": "用户登录功能，支持用户名密码登录",
                 "test_module": "登录模块",
                 "test_case_count": 3,
-                "provider": "azure"
+                "provider": "deepseek"
             },
             headers={"Content-Type": "application/json"}
         )
