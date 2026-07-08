@@ -16,7 +16,6 @@ load_dotenv()
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, StreamingResponse, FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -76,15 +75,7 @@ app.add_middleware(
 # 静态文件和模板
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# 初始化 Jinja2 模板引擎(禁用缓存避免 dict 哈希问题)
-from jinja2 import ChoiceLoader, FileSystemLoader
-from starlette.templating import Jinja2Templates
-
-jinja_env = {
-    "loader": ChoiceLoader([FileSystemLoader("templates")]),
-    "auto_reload": True,
-}
-templates = Jinja2Templates(directory="templates")
+# 模板通过 aiofiles 直接读取（不使用 Jinja2 引擎，避免不必要的依赖）
 
 # 读取提示词配置
 with open('prompts.json', 'r', encoding='utf-8') as file:
@@ -131,19 +122,19 @@ class GenerateRequest(BaseModel):
     menu2: str = ""
     test_case_count: int = 10
     prompt: str = ""
-    provider: str = "azure"
+    provider: str = "deepseek"
     source_type: str = "manual-input"  # 来源类型：upload-doc, upload-axure, upload-image, manual-input, knowledge-base
 
 
 class RefineRequest(BaseModel):
     content: str
-    provider: str = "azure"
+    provider: str = "deepseek"
 
 
 class VectorQueryRequest(BaseModel):
     persist_dir: str
     question: str
-    provider: str = "azure"
+    provider: str = "deepseek"
 
 
 class ChromaQueryRequest(BaseModel):
@@ -152,14 +143,14 @@ class ChromaQueryRequest(BaseModel):
     query_text: str
     top_k: int = 5
     use_ai_refine: bool = False  # 是否使用大模型整理结果
-    provider: str = "azure"
+    provider: str = "deepseek"
 
 
 class CreateKnowledgeBaseRequest(BaseModel):
     """创建知识库请求"""
     name: str
     axure_url: str
-    vision_provider: str = "doubao"
+    vision_provider: str = "aliyun"
     username: str = ""
     password: str = ""
     use_ai_refine: bool = False
@@ -179,7 +170,7 @@ class GenerateTestCasesFromKBRequest(BaseModel):
     requirement: str
     test_module: str = "模块"
     top_k: int = 5
-    provider: str = "azure"
+    provider: str = "deepseek"
 
 
 class CreateEnhancedKBRequest(BaseModel):
@@ -207,7 +198,7 @@ class GenerateTestCasesSmartRequest(BaseModel):
     page_key: Optional[str] = None
     recall_strategy: str = "auto"
     top_k: int = 5
-    provider: str = "azure"
+    provider: str = "deepseek"
     use_ai_structure: bool = False  # 是否使用AI结构化召回内容
 
 
@@ -238,7 +229,7 @@ class GenerateTestCasesFromSitemapRequest(BaseModel):
     page_key: Optional[str] = None
     recall_strategy: str = "auto"
     top_k: int = 5
-    provider: str = "azure"
+    provider: str = "deepseek"
 
 
 class ExportRequest(BaseModel):
@@ -342,7 +333,7 @@ async def upload_axure(
     file: UploadFile = File(...),
     use_md: bool = Form(True),
     use_ai_refine: bool = Form(False),
-    provider: str = Form("azure")
+    provider: str = Form("deepseek")
 ):
     """
     上传Axure原型包
@@ -410,7 +401,7 @@ class AxureUrlRequest(BaseModel):
     password: str = ""  # 域账号密码（可选）
     use_md: bool = True
     use_ai_refine: bool = True
-    provider: str = "azure"
+    provider: str = "deepseek"
     enable_recursive: bool = False  # 是否启用递归解析蓝色链接
     max_depth: int = 3  # 递归最大深度
 
@@ -519,13 +510,13 @@ async def fetch_axure_url(request: AxureUrlRequest):
 @app.post("/api/upload/images")
 async def upload_images(
     files: List[UploadFile] = File(...),
-    provider: str = Form("doubao"),
+    provider: str = Form("aliyun"),
     prompt: str = Form("")
 ):
     """
     上传图片进行OCR识别
     支持多张图片，使用阿里云或豆包视觉模型
-    provider: "doubao" (默认) | "aliyun"
+    provider: "aliyun" (默认) | "deepseek"
     prompt: 自定义识别提示词
     """
     try:

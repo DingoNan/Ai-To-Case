@@ -198,11 +198,13 @@ async def generate_test_cases_stream(
 ):
     """
     流式生成测试用例，逐块返回内容
+    
+    现在会从流式API最后一条消息中提取 token_usage 并传递到 complete 事件中
 
     Yields:
         dict: 包含类型和内容的字典
             - {"type": "chunk", "content": str}: 流式文本片段
-            - {"type": "complete", "content": str, "test_cases": dict}: 完成时返回完整内容和解析后的测试用例
+            - {"type": "complete", "content": str, "test_cases": dict, "_token_usage": dict}: 完成时返回完整内容和解析后的测试用例
             - {"type": "error", "content": str}: 错误信息
     """
     # 如果未提供system_message，则构建它
@@ -212,6 +214,7 @@ async def generate_test_cases_stream(
         )
 
     full_content = ""
+    token_usage = {}
     try:
         print("发送给到大模型的提示词为: " + system_message)
         # 流式调用大模型API
@@ -220,6 +223,11 @@ async def generate_test_cases_stream(
             if isinstance(chunk, dict) and "error" in chunk:
                 yield {"type": "error", "content": chunk.get("error")}
                 return
+
+            # 检查是否为 token_usage 信息（流式API最后一条消息）
+            if isinstance(chunk, dict) and "_token_usage" in chunk:
+                token_usage = chunk["_token_usage"]
+                continue
 
             # 累积内容
             full_content += chunk
@@ -237,14 +245,14 @@ async def generate_test_cases_stream(
             if "test_cases" not in test_cases or not isinstance(test_cases["test_cases"], list):
                 raise ValueError("生成的测试用例格式不正确")
 
-            yield {"type": "complete", "content": full_content, "test_cases": test_cases}
+            yield {"type": "complete", "content": full_content, "test_cases": test_cases, "_token_usage": token_usage}
         except json.JSONDecodeError:
             # 如果直接解析失败，尝试提取JSON部分
-            json_pattern = r'({[\s\S]*})'
+            json_pattern = r'\{[\s\S]*\}'
             match = re.search(json_pattern, full_content)
 
             if match:
-                json_str = match.group(1)
+                json_str = match.group(0)
                 # 修复JSON中的控制字符
                 fixed_json_str = _fix_json_control_chars(json_str)
                 test_cases = json.loads(fixed_json_str)
@@ -253,7 +261,7 @@ async def generate_test_cases_stream(
                 if "test_cases" not in test_cases or not isinstance(test_cases["test_cases"], list):
                     raise ValueError("生成的测试用例格式不正确")
 
-                yield {"type": "complete", "content": full_content, "test_cases": test_cases}
+                yield {"type": "complete", "content": full_content, "test_cases": test_cases, "_token_usage": token_usage}
             else:
                 yield {"type": "error", "content": "无法从API响应中提取JSON"}
 
