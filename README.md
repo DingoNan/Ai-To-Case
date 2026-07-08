@@ -226,7 +226,7 @@ uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 ```
 
 ### 可视化查看
-访问 `http://localhost:8000/stats` 即可查看：
+访问 `http://localhost:8001/stats` 即可查看：
 - **总体概览** - 总调用次数、总 Token 消耗、独立 IP 数
 - **IP 统计** - 每个 IP 的调用次数和 Token 消耗排行
 - **详细记录** - 最近 100 条调用记录，支持时间范围筛选
